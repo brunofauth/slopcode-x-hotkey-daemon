@@ -25,6 +25,11 @@
 #ifndef SXHKD_CHAIN_PHASE_H
 #define SXHKD_CHAIN_PHASE_H
 
+/* The character placed between chord texts when the chain progress string is
+ * joined. It is the ';' link separator of the configuration syntax, which can
+ * therefore never occur inside a single chord's text. */
+#define CHAIN_PROGRESS_SEPARATOR ';'
+
 /* The phase of the chord-chain recorder. Exactly one phase holds at any time.
  *
  * This replaces the former pair of booleans `chained` and `locked`, under which

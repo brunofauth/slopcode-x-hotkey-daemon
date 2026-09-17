@@ -1,3 +1,4 @@
 *.o
 sxhkd
 tags
+test/indicator_core_test

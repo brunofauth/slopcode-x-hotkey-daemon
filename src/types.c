@@ -64,7 +64,8 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 				if (chain_phase_at_entry == CHAIN_PHASE_IDLE) {
 					snprintf(progress, sizeof(progress), "%s", c->state->repr);
 				} else {
-					strncat(progress, ";", sizeof(progress) - strlen(progress) - 1);
+					const char separator[2] = {CHAIN_PROGRESS_SEPARATOR, '\0'};
+					strncat(progress, separator, sizeof(progress) - strlen(progress) - 1);
 					strncat(progress, c->state->repr, sizeof(progress) - strlen(progress) - 1);
 				}
 				put_status(HOTKEY_PREFIX, progress);
