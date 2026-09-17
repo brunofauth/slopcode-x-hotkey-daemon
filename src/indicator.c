@@ -37,6 +37,7 @@
 /* Everything the enabled indicator owns. Exists iff the indicator is enabled. */
 typedef struct {
 	xcb_connection_t *connection;
+	xcb_window_t root_window;
 	xcb_window_t window;
 	cairo_device_t *device;
 	cairo_surface_t *surface;
@@ -184,11 +185,12 @@ static cairo_status_t paint_banner(const indicator_resources_t *resources)
 	return cairo_surface_status(resources->surface);
 }
 
-static cairo_status_t show_banner(indicator_enabled_t *enabled, chain_phase_t chain_phase, const char *banner_text)
+/* Measures the layout's current text, sizes and places the window for it,
+ * maps the window if it is hidden and paints. Does not touch the cache. */
+static cairo_status_t place_and_paint_banner(indicator_enabled_t *enabled)
 {
 	indicator_resources_t *resources = &enabled->resources;
 
-	set_layout_text_safely(resources->layout, banner_text);
 	int text_width = 0;
 	int text_height = 0;
 	pango_layout_get_pixel_size(resources->layout, &text_width, &text_height);
@@ -222,9 +224,15 @@ static cairo_status_t show_banner(indicator_enabled_t *enabled, chain_phase_t ch
 			break;
 	}
 
-	const cairo_status_t paint_status = paint_banner(resources);
-	if (paint_status != CAIRO_STATUS_SUCCESS)
-		return paint_status;
+	return paint_banner(resources);
+}
+
+static cairo_status_t show_banner(indicator_enabled_t *enabled, chain_phase_t chain_phase, const char *banner_text)
+{
+	set_layout_text_safely(enabled->resources.layout, banner_text);
+	const cairo_status_t status = place_and_paint_banner(enabled);
+	if (status != CAIRO_STATUS_SUCCESS)
+		return status;
 
 	enabled->display.kind = INDICATOR_DISPLAY_VISIBLE;
 	enabled->display.as.visible.chain_phase = chain_phase;
@@ -300,6 +308,12 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	}
 	make_window_transparent_to_input(connection, window);
 
+	/* Follow screen size changes: the server sends ConfigureNotify for the
+	 * root window to every client that selects StructureNotify on it, which
+	 * includes resizes driven by RandR. sxhkd selects nothing else on root. */
+	const uint32_t root_event_mask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
+	xcb_change_window_attributes(connection, screen_of_window->root, XCB_CW_EVENT_MASK, &root_event_mask);
+
 	cairo_surface_t *surface = cairo_xcb_surface_create(connection, window, visual_type, 1, 1);
 	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
 		err("Indicator: can't create the cairo surface: %s.\n", cairo_status_to_string(cairo_surface_status(surface)));
@@ -326,6 +340,7 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	indicator_singleton.kind = INDICATOR_ENABLED;
 	indicator_enabled_t *enabled = &indicator_singleton.as.enabled;
 	enabled->resources.connection = connection;
+	enabled->resources.root_window = screen_of_window->root;
 	enabled->resources.window = window;
 	enabled->resources.device = device;
 	enabled->resources.surface = surface;
@@ -406,6 +421,35 @@ void indicator_handle_expose(const xcb_expose_event_t *expose_event)
 	const cairo_status_t paint_status = paint_banner(&enabled->resources);
 	if (paint_status != CAIRO_STATUS_SUCCESS)
 		disable_after_error(paint_status);
+}
+
+void indicator_handle_configure_notify(const xcb_configure_notify_event_t *configure_event)
+{
+	switch (indicator_singleton.kind) {
+		case INDICATOR_DISABLED:
+			return;
+		case INDICATOR_ENABLED:
+			break;
+	}
+	indicator_enabled_t *enabled = &indicator_singleton.as.enabled;
+	indicator_resources_t *resources = &enabled->resources;
+	if (configure_event->window != resources->root_window)
+		return;
+	const pixel_size_t new_screen_size = {configure_event->width, configure_event->height};
+	if (new_screen_size.width == resources->screen_size.width && new_screen_size.height == resources->screen_size.height)
+		return;
+	resources->screen_size = new_screen_size;
+	pango_layout_set_width(resources->layout, available_text_width_in_pango_units(new_screen_size));
+	switch (enabled->display.kind) {
+		case INDICATOR_DISPLAY_HIDDEN:
+			return;
+		case INDICATOR_DISPLAY_VISIBLE:
+			break;
+	}
+	/* The cached text is already in the layout; re-place and repaint it. */
+	const cairo_status_t status = place_and_paint_banner(enabled);
+	if (status != CAIRO_STATUS_SUCCESS)
+		disable_after_error(status);
 }
 
 void indicator_shutdown(void)

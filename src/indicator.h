@@ -49,6 +49,10 @@ void indicator_sync_with_chain_phase(chain_phase_t chain_phase, const char *prog
  * part of the window was uncovered. Ignores events for other windows. */
 void indicator_handle_expose(const xcb_expose_event_t *expose_event);
 
+/* Re-anchors (and, if visible, re-lays out) the banner after the root
+ * window, i.e. the screen, changed size. Ignores other windows' events. */
+void indicator_handle_configure_notify(const xcb_configure_notify_event_t *configure_event);
+
 /* Releases every resource. Must run before xcb_disconnect(). */
 void indicator_shutdown(void);
 

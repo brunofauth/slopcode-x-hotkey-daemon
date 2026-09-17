@@ -231,6 +231,9 @@ int main(int argc, char *argv[])
 				case XCB_EXPOSE:
 					indicator_handle_expose((const xcb_expose_event_t *) evt);
 					break;
+				case XCB_CONFIGURE_NOTIFY:
+					indicator_handle_configure_notify((const xcb_configure_notify_event_t *) evt);
+					break;
 				default:
 					PRINTF("received event %u\n", event_type);
 					break;
