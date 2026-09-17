@@ -83,6 +83,10 @@ chain_t *make_chain(void);
 cycle_t *make_cycle(int delay, int period);
 hotkey_t *make_hotkey(chain_t *chain, char *command);
 void add_hotkey(hotkey_t *hk);
+/* Ends the chord chain in progress without touching the grabs: emits the end
+ * status, rewinds every chain to its head, goes idle and cancels the timeout. */
+void reset_chain_recorder(void);
+/* reset_chain_recorder() followed by restoring the grabs of the chain heads. */
 void abort_chain(void);
 void destroy_chain(chain_t *chain);
 void destroy_chord(chord_t *chord);

@@ -276,15 +276,23 @@ void add_hotkey(hotkey_t *hk)
 	}
 }
 
-void abort_chain(void)
+void reset_chain_recorder(void)
 {
-	PUTS("abort chain");
+	PUTS("reset chain recorder");
 	put_status(END_CHAIN_PREFIX, "End chain");
 	for (hotkey_t *hk = hotkeys_head; hk != NULL; hk = hk->next)
 		hk->chain->state = hk->chain->head;
 	chain_phase = CHAIN_PHASE_IDLE;
 	if (timeout > 0)
 		alarm(0);
+}
+
+void abort_chain(void)
+{
+	PUTS("abort chain");
+	reset_chain_recorder();
+	/* Drop the grabs of the chords that were expected next (and of the abort
+	 * keysym) and restore the grabs of every chain head. */
 	ungrab();
 	grab();
 }

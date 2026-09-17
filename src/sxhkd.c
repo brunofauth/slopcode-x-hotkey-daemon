@@ -383,6 +383,11 @@ void cleanup(void)
 void reload_cmd(void)
 {
 	PUTS("reload");
+	/* The chains about to be destroyed may be mid-recording; end the
+	 * recording first so that nothing of it survives into the new bindings.
+	 * The grabs are rebuilt from scratch below anyway. */
+	if (chain_phase != CHAIN_PHASE_IDLE)
+		reset_chain_recorder();
 	cleanup();
 	load_config(config_file);
 	for (int i = 0; i < num_extra_confs; i++)
@@ -395,6 +400,10 @@ void toggle_grab_cmd(void)
 {
 	PUTS("toggle grab");
 	if (grabbed) {
+		/* No further chord can arrive once the bindings are released, so a
+		 * chain in progress would otherwise linger until the next grab. */
+		if (chain_phase != CHAIN_PHASE_IDLE)
+			reset_chain_recorder();
 		ungrab();
 	} else {
 		grab();
