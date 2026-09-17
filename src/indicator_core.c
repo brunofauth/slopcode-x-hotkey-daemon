@@ -34,11 +34,15 @@ bool indicator_parse_position(const char *position_text, indicator_position_t *p
 		const char *name;
 		indicator_position_t position;
 	} known_positions[] = {
+		{"top", INDICATOR_POSITION_TOP},
 		{"top-left", INDICATOR_POSITION_TOP_LEFT},
 		{"top-right", INDICATOR_POSITION_TOP_RIGHT},
+		{"bottom", INDICATOR_POSITION_BOTTOM},
 		{"bottom-left", INDICATOR_POSITION_BOTTOM_LEFT},
 		{"bottom-right", INDICATOR_POSITION_BOTTOM_RIGHT},
 		{"center", INDICATOR_POSITION_CENTER},
+		{"center-left", INDICATOR_POSITION_CENTER_LEFT},
+		{"center-right", INDICATOR_POSITION_CENTER_RIGHT},
 	};
 	for (size_t index = 0; index < LENGTH(known_positions); index++) {
 		if (strcmp(position_text, known_positions[index].name) == 0) {
@@ -190,6 +194,10 @@ pixel_origin_t indicator_compute_window_origin(indicator_position_t position, pi
 	int32_t x = 0;
 	int32_t y = 0;
 	switch (position) {
+		case INDICATOR_POSITION_TOP:
+			x = centered_x;
+			y = top_aligned_y;
+			break;
 		case INDICATOR_POSITION_TOP_LEFT:
 			x = left_aligned_x;
 			y = top_aligned_y;
@@ -197,6 +205,10 @@ pixel_origin_t indicator_compute_window_origin(indicator_position_t position, pi
 		case INDICATOR_POSITION_TOP_RIGHT:
 			x = right_aligned_x;
 			y = top_aligned_y;
+			break;
+		case INDICATOR_POSITION_BOTTOM:
+			x = centered_x;
+			y = bottom_aligned_y;
 			break;
 		case INDICATOR_POSITION_BOTTOM_LEFT:
 			x = left_aligned_x;
@@ -208,6 +220,14 @@ pixel_origin_t indicator_compute_window_origin(indicator_position_t position, pi
 			break;
 		case INDICATOR_POSITION_CENTER:
 			x = centered_x;
+			y = centered_y;
+			break;
+		case INDICATOR_POSITION_CENTER_LEFT:
+			x = left_aligned_x;
+			y = centered_y;
+			break;
+		case INDICATOR_POSITION_CENTER:
+			x = right_aligned_x;
 			y = centered_y;
 			break;
 	}

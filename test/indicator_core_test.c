@@ -22,11 +22,15 @@ static unsigned int passed_check_count = 0;
 static void test_parse_position(void)
 {
 	indicator_position_t position = INDICATOR_POSITION_CENTER;
+	CHECK(indicator_parse_position("top", &position) && position == INDICATOR_POSITION_TOP);
 	CHECK(indicator_parse_position("top-left", &position) && position == INDICATOR_POSITION_TOP_LEFT);
 	CHECK(indicator_parse_position("top-right", &position) && position == INDICATOR_POSITION_TOP_RIGHT);
+	CHECK(indicator_parse_position("bottom", &position) && position == INDICATOR_POSITION_BOTTOM);
 	CHECK(indicator_parse_position("bottom-left", &position) && position == INDICATOR_POSITION_BOTTOM_LEFT);
 	CHECK(indicator_parse_position("bottom-right", &position) && position == INDICATOR_POSITION_BOTTOM_RIGHT);
 	CHECK(indicator_parse_position("center", &position) && position == INDICATOR_POSITION_CENTER);
+	CHECK(indicator_parse_position("center-left", &position) && position == INDICATOR_POSITION_CENTER_LEFT);
+	CHECK(indicator_parse_position("center-right", &position) && position == INDICATOR_POSITION_CENTER_RIGHT);
 
 	position = INDICATOR_POSITION_BOTTOM_LEFT;
 	CHECK(!indicator_parse_position("TOP-LEFT", &position));
