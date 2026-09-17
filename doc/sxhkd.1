@@ -71,7 +71,9 @@ Redirect the commands output to the given file\&.
 .PP
 \fB\-s\fR \fISTATUS_FIFO\fR
 .RS 4
-Output status information to the given FIFO\&.
+Output status information to the given FIFO (see the
+\fIStatus FIFO\fR
+section)\&. The FIFO must already exist\&.
 .RE
 .PP
 \fB\-a\fR \fIABORT_KEYSYM\fR
@@ -137,6 +139,100 @@ The commands are executed via \fBSHELL\fR \fI\-c\fR \fBCOMMAND\fR (hence you can
 \fBSXHKD_PID\fR will be automatically set to the pid of \fBsxhkd\fR in processes spawned by \fBsxhkd\fR, which may be used by the child process to send easily signals such as \fISIGALRM\fR to the correct instance of \fBsxhkd\fR\&.
 .sp
 If you have a non\-QWERTY keyboard or a non\-standard layout configuration, you should provide a \fICOUNT\fR of \fI1\fR to the \fB\-m\fR option or \fI\-1\fR (interpreted as infinity) if you constantly switch from one layout to the other (\fBsxhkd\fR ignores all mapping notify events by default because the majority of those events are pointless)\&.
+.SH "STATUS FIFO"
+.sp
+With the \fB\-s\fR option, \fBsxhkd\fR reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, \&...) can display the chord chain in progress or react to the commands being run\&.
+.sp
+The pipe must be created beforehand, for instance with \fBmkfifo\fR\&. \fBsxhkd\fR opens it for reading and writing in non\-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe; if the pipe cannot be opened, a warning is printed and no status is reported\&. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards\&.
+.sp
+Each message is a single line made of a one\-character prefix followed by a text:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+PREFIX  WHEN                                        TEXT
+H       a chord was received                        the chords received so far
+B       a chord chain has begun                     Begin chain
+E       the chord chain has ended                   End chain
+T       the chord chain timed out                   Timeout reached
+C       a command has been started                  the command
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+The text of an \fIH\fR message is the list of the chords received since the chain began, separated by semicolons, each one written as in the configuration file (modifiers, \fB~\fR and \fB@\fR included)\&. Every chord that matches a hotkey produces an \fIH\fR message, including the only chord of a single\-chord hotkey\&. In a locked chain, every chord received after the lock produces an \fIH\fR message made of the locked prefix and that chord; the prefix itself never grows\&.
+.sp
+\fIB\fR is sent after the \fIH\fR message of the first chord of a chain, and \fIE\fR is sent whenever the chain ends: after its last chord, when the abort keysym is pressed, when the timeout is reached (in which case a \fIT\fR message precedes it), or when \fBsxhkd\fR reloads its configuration or ungrabs its bindings while a chain is in progress\&. \fIC\fR is sent after the command has been started, and after the \fIE\fR message when the command ends a chain\&.
+.sp
+For example, given the two hotkeys
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+super + a
+    xterm
+
+super + m ; h
+    echo H
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+pressing \fIsuper + a\fR produces:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+Hsuper + a
+Cxterm
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+and pressing \fIsuper + m\fR then \fIh\fR produces:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+Hsuper + m
+BBegin chain
+Hsuper + m;h
+EEnd chain
+Cecho H
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+A minimal consumer creates the pipe, starts \fBsxhkd\fR on it, and reads it line by line, stripping the prefix:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+mkfifo "$XDG_RUNTIME_DIR/sxhkd\&.fifo"
+sxhkd \-s "$XDG_RUNTIME_DIR/sxhkd\&.fifo" &
+
+while read \-r line; do
+    case $line in
+        H*) notify\-send \-t 2000 "sxhkd" "${line#?}" ;;
+        C*) notify\-send \-t 4000 "sxhkd" "Running: ${line#?}" ;;
+        T*) notify\-send \-t 1000 "sxhkd" "Chain timed out" ;;
+    esac
+done < "$XDG_RUNTIME_DIR/sxhkd\&.fifo"
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+The \fBexamples/notification\fR directory of the source distribution contains a complete setup along these lines\&.
 .SH "CONFIGURATION"
 .sp
 Each line of the configuration file is interpreted as so:

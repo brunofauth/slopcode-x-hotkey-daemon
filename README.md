@@ -10,6 +10,43 @@ Chord chains (`super + m ; h`) and locked chains (`super + n : {h,j,k,l}`) act l
 
 	sxhkd -i top-right -f "monospace 14" -F '#ffffff' -B '#222222'
 
+## Status FIFO
+
+With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that a notification script or a status bar can show the chord chain in progress or react to the commands being run. Create the pipe first, then point *sxhkd* at it:
+
+	mkfifo "$XDG_RUNTIME_DIR/sxhkd.fifo"
+	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+
+Each message is one line: a one-character prefix, then a text.
+
+| Prefix | When                         | Text                                        |
+|--------|------------------------------|---------------------------------------------|
+| `H`    | a chord was received         | the chords received so far, `;`-separated   |
+| `B`    | a chord chain has begun      | `Begin chain`                               |
+| `E`    | the chord chain has ended    | `End chain`                                 |
+| `T`    | the chord chain timed out    | `Timeout reached` (followed by an `E` line) |
+| `C`    | a command has been started   | the command                                 |
+
+Pressing `super + m` then `h` for the binding `super + m ; h` produces:
+
+	Hsuper + m
+	BBegin chain
+	Hsuper + m;h
+	EEnd chain
+	Cecho H
+
+A single-chord binding only produces its `H` and `C` lines. A consumer reads the pipe line by line and strips the prefix:
+
+	while read -r line; do
+	    case $line in
+	        H*) notify-send -t 2000 "sxhkd" "${line#?}" ;;
+	        C*) notify-send -t 4000 "sxhkd" "Running: ${line#?}" ;;
+	        T*) notify-send -t 1000 "sxhkd" "Chain timed out" ;;
+	    esac
+	done < "$XDG_RUNTIME_DIR/sxhkd.fifo"
+
+See `examples/notification` for a complete setup, and the man page for the details of when each message is sent.
+
 ## Dependencies
 
 - libxcb, xcb-util-keysyms, xcb-util (`xcb_event.h`)

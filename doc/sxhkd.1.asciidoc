@@ -43,7 +43,7 @@ Options
     Redirect the commands output to the given file.
 
 *-s* _STATUS_FIFO_::
-    Output status information to the given FIFO.
+    Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO must already exist.
 
 *-a* _ABORT_KEYSYM_::
     Name of the keysym used for aborting chord chains.
@@ -84,6 +84,72 @@ The commands are executed via *SHELL* _-c_ *COMMAND* (hence you can use environm
 
 If you have a non-QWERTY keyboard or a non-standard layout configuration, you should provide a _COUNT_ of _1_ to the *-m* option or _-1_ (interpreted as infinity) if you constantly switch from one layout to the other (*sxhkd* ignores all mapping notify events by default because the majority of those events are pointless).
 
+
+Status FIFO
+-----------
+
+With the *-s* option, *sxhkd* reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, …) can display the chord chain in progress or react to the commands being run.
+
+The pipe must be created beforehand, for instance with *mkfifo*. *sxhkd* opens it for reading and writing in non-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe; if the pipe cannot be opened, a warning is printed and no status is reported. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards.
+
+Each message is a single line made of a one-character prefix followed by a text:
+
+----
+PREFIX  WHEN                                        TEXT
+H       a chord was received                        the chords received so far
+B       a chord chain has begun                     Begin chain
+E       the chord chain has ended                   End chain
+T       the chord chain timed out                   Timeout reached
+C       a command has been started                  the command
+----
+
+The text of an _H_ message is the list of the chords received since the chain began, separated by semicolons, each one written as in the configuration file (modifiers, *~* and *@* included). Every chord that matches a hotkey produces an _H_ message, including the only chord of a single-chord hotkey. In a locked chain, every chord received after the lock produces an _H_ message made of the locked prefix and that chord; the prefix itself never grows.
+
+_B_ is sent after the _H_ message of the first chord of a chain, and _E_ is sent whenever the chain ends: after its last chord, when the abort keysym is pressed, when the timeout is reached (in which case a _T_ message precedes it), or when *sxhkd* reloads its configuration or ungrabs its bindings while a chain is in progress. _C_ is sent after the command has been started, and after the _E_ message when the command ends a chain.
+
+For example, given the two hotkeys
+
+----
+super + a
+    xterm
+
+super + m ; h
+    echo H
+----
+
+pressing _super + a_ produces:
+
+----
+Hsuper + a
+Cxterm
+----
+
+and pressing _super + m_ then _h_ produces:
+
+----
+Hsuper + m
+BBegin chain
+Hsuper + m;h
+EEnd chain
+Cecho H
+----
+
+A minimal consumer creates the pipe, starts *sxhkd* on it, and reads it line by line, stripping the prefix:
+
+----
+mkfifo "$XDG_RUNTIME_DIR/sxhkd.fifo"
+sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+
+while read -r line; do
+    case $line in
+        H*) notify-send -t 2000 "sxhkd" "${line#?}" ;;
+        C*) notify-send -t 4000 "sxhkd" "Running: ${line#?}" ;;
+        T*) notify-send -t 1000 "sxhkd" "Chain timed out" ;;
+    esac
+done < "$XDG_RUNTIME_DIR/sxhkd.fifo"
+----
+
+The *examples/notification* directory of the source distribution contains a complete setup along these lines.
 
 Configuration
 -------------
