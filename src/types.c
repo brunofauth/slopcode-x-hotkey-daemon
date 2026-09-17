@@ -45,6 +45,33 @@ static bool chain_is_dormant(const chain_t *chain, chain_phase_t chain_phase_at_
 	return false;
 }
 
+/* Emits the hotkey status line for a chord that just matched and records the
+ * chain progress. Only chords that advance a chain are persisted: the tail
+ * chord of a locked chain is reported as part of the full hotkey text, while
+ * the progress string keeps describing the locked prefix, i.e. the mode. */
+static void report_matched_chord(const chord_t *matched_chord, chain_phase_t chain_phase_at_entry)
+{
+	const char separator[2] = {CHAIN_PROGRESS_SEPARATOR, '\0'};
+	switch (chain_phase_at_entry) {
+		case CHAIN_PHASE_IDLE:
+			snprintf(progress, sizeof(progress), "%s", matched_chord->repr);
+			put_status(HOTKEY_PREFIX, progress);
+			break;
+		case CHAIN_PHASE_IN_PROGRESS:
+			strncat(progress, separator, sizeof(progress) - strlen(progress) - 1);
+			strncat(progress, matched_chord->repr, sizeof(progress) - strlen(progress) - 1);
+			put_status(HOTKEY_PREFIX, progress);
+			break;
+		case CHAIN_PHASE_LOCKED: {
+			/* Large enough for progress, the separator and a repr: never truncates. */
+			char hotkey_text[sizeof(progress) + sizeof(separator) + MAXLEN];
+			snprintf(hotkey_text, sizeof(hotkey_text), "%s%s%s", progress, separator, matched_chord->repr);
+			put_status(HOTKEY_PREFIX, hotkey_text);
+			break;
+		}
+	}
+}
+
 hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield, uint8_t event_type, bool *replay_event)
 {
 	/* The loop below never changes the phase: its only call to abort_chain()
@@ -53,6 +80,7 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 	const chain_phase_t chain_phase_at_entry = chain_phase;
 	int num_active = 0;
 	int num_locked = 0;
+	bool hotkey_reported = false;
 	hotkey_t *result = NULL;
 
 	for (hotkey_t *hk = hotkeys_head; hk != NULL; hk = hk->next) {
@@ -60,15 +88,10 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 		if (chain_is_dormant(c, chain_phase_at_entry))
 			continue;
 		if (match_chord(c->state, event_type, keysym, button, modfield)) {
-			if (num_active == 0) {
-				if (chain_phase_at_entry == CHAIN_PHASE_IDLE) {
-					snprintf(progress, sizeof(progress), "%s", c->state->repr);
-				} else {
-					const char separator[2] = {CHAIN_PROGRESS_SEPARATOR, '\0'};
-					strncat(progress, separator, sizeof(progress) - strlen(progress) - 1);
-					strncat(progress, c->state->repr, sizeof(progress) - strlen(progress) - 1);
-				}
-				put_status(HOTKEY_PREFIX, progress);
+			/* Report the first chain that matches, whatever came before it. */
+			if (!hotkey_reported) {
+				hotkey_reported = true;
+				report_matched_chord(c->state, chain_phase_at_entry);
 			}
 			if (replay_event != NULL && c->state->replay_event)
 				*replay_event = true;
