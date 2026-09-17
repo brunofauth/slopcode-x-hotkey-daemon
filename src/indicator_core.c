@@ -81,15 +81,32 @@ typedef struct {
 	size_t length;
 } bounded_writer_t;
 
-static void bounded_writer_append(bounded_writer_t *writer, const char *text)
+static void bounded_writer_append_character(bounded_writer_t *writer, char character)
 {
-	for (const char *cursor = text; *cursor != '\0'; cursor++) {
-		if (writer->length + 1 >= writer->capacity)
-			break;
-		writer->buffer[writer->length] = *cursor;
+	if (writer->length + 1 < writer->capacity) {
+		writer->buffer[writer->length] = character;
 		writer->length++;
 	}
 	writer->buffer[writer->length] = '\0';
+}
+
+static void bounded_writer_append(bounded_writer_t *writer, const char *text)
+{
+	for (const char *cursor = text; *cursor != '\0'; cursor++)
+		bounded_writer_append_character(writer, *cursor);
+}
+
+/* Appends [chord_begin, chord_end) without its surrounding blanks. Chord texts
+ * are raw configuration tokens and keep the blanks that surrounded their
+ * separator, e.g. "super + m " and " h" for "super + m ; h". */
+static void bounded_writer_append_trimmed(bounded_writer_t *writer, const char *chord_begin, const char *chord_end)
+{
+	while (chord_begin < chord_end && !isgraph((unsigned char) *chord_begin))
+		chord_begin++;
+	while (chord_end > chord_begin && !isgraph((unsigned char) chord_end[-1]))
+		chord_end--;
+	for (const char *cursor = chord_begin; cursor < chord_end; cursor++)
+		bounded_writer_append_character(writer, *cursor);
 }
 
 void indicator_derive_banner(chain_phase_t chain_phase, const char *progress_text, indicator_banner_t *banner)
@@ -114,13 +131,16 @@ void indicator_derive_banner(chain_phase_t chain_phase, const char *progress_tex
 		return;
 
 	bounded_writer_t writer = {banner->text, sizeof(banner->text), 0};
-	for (const char *cursor = progress_text; *cursor != '\0'; cursor++) {
-		if (*cursor == CHAIN_PROGRESS_SEPARATOR) {
-			bounded_writer_append(&writer, " ; ");
-		} else {
-			const char single_character[2] = {*cursor, '\0'};
-			bounded_writer_append(&writer, single_character);
-		}
+	const char *chord_begin = progress_text;
+	for (;;) {
+		const char *chord_end = chord_begin;
+		while (*chord_end != '\0' && *chord_end != CHAIN_PROGRESS_SEPARATOR)
+			chord_end++;
+		bounded_writer_append_trimmed(&writer, chord_begin, chord_end);
+		if (*chord_end == '\0')
+			break;
+		bounded_writer_append(&writer, " ; ");
+		chord_begin = chord_end + 1;
 	}
 	bounded_writer_append(&writer, pending_chord_marker);
 	banner->kind = INDICATOR_BANNER_PRESENT;

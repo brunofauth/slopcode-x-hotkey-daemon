@@ -85,6 +85,14 @@ static void test_derive_banner(void)
 	indicator_derive_banner(CHAIN_PHASE_LOCKED, "super + n;h;j", &banner);
 	CHECK(strcmp(banner.text, "super + n ; h ; j :") == 0);
 
+	/* Raw chord tokens keep the blanks around their separators; the banner must not. */
+	indicator_derive_banner(CHAIN_PHASE_IN_PROGRESS, "super + m ; h", &banner);
+	CHECK(strcmp(banner.text, "super + m ; h ;") == 0);
+	indicator_derive_banner(CHAIN_PHASE_LOCKED, "  super + n  ;\t h ;j  ", &banner);
+	CHECK(strcmp(banner.text, "super + n ; h ; j :") == 0);
+	indicator_derive_banner(CHAIN_PHASE_IN_PROGRESS, "super  +  m", &banner);
+	CHECK(strcmp(banner.text, "super  +  m ;") == 0);   /* inner blanks are the user's */
+
 	indicator_derive_banner(CHAIN_PHASE_IN_PROGRESS, "", &banner);
 	CHECK(banner.kind == INDICATOR_BANNER_PRESENT);
 	CHECK(strcmp(banner.text, " ;") == 0);
