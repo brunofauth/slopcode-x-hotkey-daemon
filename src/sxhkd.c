@@ -59,6 +59,7 @@ char sxhkd_pid[MAXLEN];
 hotkey_t *hotkeys_head, *hotkeys_tail;
 bool grabbed;
 volatile sig_atomic_t running, toggle_grab, reload, bell;
+sigset_t original_signal_mask;
 chain_phase_t chain_phase;
 xcb_keysym_t abort_keysym;
 chord_t *abort_chord;
@@ -203,17 +204,34 @@ int main(int argc, char *argv[])
 	chain_phase = CHAIN_PHASE_IDLE;
 	running = true;
 
+	/* The handled signals stay blocked while the loop body runs and are only
+	 * delivered inside pselect(), which installs the original mask atomically
+	 * for the duration of the wait. A signal can therefore no longer slip in
+	 * between the flag checks and the wait, where it would have gone
+	 * unnoticed until the next X event. Children restore the original mask
+	 * before exec (see execute()). */
+	sigset_t handled_signals;
+	sigemptyset(&handled_signals);
+	sigaddset(&handled_signals, SIGINT);
+	sigaddset(&handled_signals, SIGHUP);
+	sigaddset(&handled_signals, SIGTERM);
+	sigaddset(&handled_signals, SIGUSR1);
+	sigaddset(&handled_signals, SIGUSR2);
+	sigaddset(&handled_signals, SIGALRM);
+	if (sigprocmask(SIG_BLOCK, &handled_signals, &original_signal_mask) != 0)
+		err("Can't block the handled signals.\n");
+
 	xcb_flush(dpy);
 
 	while (running) {
 		/* Events that libxcb read while waiting for a reply (cairo-xcb does
 		 * that) sit in its queue without making the descriptor readable, so
-		 * look there before blocking in select(). */
+		 * look there before blocking in pselect(). */
 		evt = xcb_poll_for_queued_event(dpy);
 		if (evt == NULL) {
 			FD_ZERO(&descriptors);
 			FD_SET(fd, &descriptors);
-			if (select(fd + 1, &descriptors, NULL, NULL, NULL) > 0)
+			if (pselect(fd + 1, &descriptors, NULL, NULL, NULL, &original_signal_mask) > 0)
 				evt = xcb_poll_for_event(dpy);
 		}
 		while (evt != NULL) {

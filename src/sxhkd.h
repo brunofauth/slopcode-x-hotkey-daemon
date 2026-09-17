@@ -63,6 +63,9 @@ extern hotkey_t *hotkeys_head, *hotkeys_tail;
 extern bool grabbed;
 /* Written from the signal handler, read by the main loop. */
 extern volatile sig_atomic_t running, toggle_grab, reload, bell;
+/* The signal mask sxhkd was started with; the main loop blocks the handled
+ * signals outside pselect(), and children must not inherit that. */
+extern sigset_t original_signal_mask;
 extern chain_phase_t chain_phase;
 extern xcb_keysym_t abort_keysym;
 extern chord_t *abort_chord;

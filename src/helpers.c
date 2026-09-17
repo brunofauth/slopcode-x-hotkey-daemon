@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <sys/types.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include "sxhkd.h"
 
@@ -78,6 +79,9 @@ void spawn(char *cmd[], bool sync)
 
 void execute(char *cmd[])
 {
+	/* The main loop keeps its handled signals blocked and the mask survives
+	 * fork and exec; the command must not run with SIGTERM and friends blocked. */
+	sigprocmask(SIG_SETMASK, &original_signal_mask, NULL);
 	setsid();
 	if (redir_fd != -1) {
 		dup2(redir_fd, STDOUT_FILENO);
