@@ -13,9 +13,9 @@
       # Everything the build itself needs; the dev shell adds tooling on top.
       nativeBuildInputs = pkgs: [ pkgs.pkg-config ];
       buildInputs = pkgs: [
-        pkgs.xorg.libxcb
-        pkgs.xorg.xcbutil          # xcb/xcb_event.h
-        pkgs.xorg.xcbutilkeysyms   # xcb/xcb_keysyms.h
+        pkgs.libxcb
+        pkgs.libxcb-util           # xcb/xcb_event.h
+        pkgs.libxcb-keysyms        # xcb/xcb_keysyms.h
         pkgs.cairo                 # cairo, cairo-xcb
         pkgs.pango                 # pango, pangocairo
       ];
@@ -89,9 +89,9 @@
               pkgs.clang-tools        # clang-tidy for `make analyze`
               pkgs.valgrind
               pkgs.asciidoc           # a2x for `make doc`
-              pkgs.xorg.xorgserver    # Xephyr for manual testing
-              pkgs.xorg.xwininfo
-              pkgs.xorg.xprop
+              pkgs.xorg-server        # Xephyr for manual testing
+              pkgs.xwininfo
+              pkgs.xprop
               pkgs.xdotool
               pkgs.xterm
             ];
