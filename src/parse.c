@@ -2698,9 +2698,7 @@ bool parse_chain(char *string, chain_t *chain)
 			return false;
 		}
 		add_chord(chain, c);
-		if (status_fifo != NULL) {
-			snprintf(c->repr, sizeof(c->repr), "%s", chord);
-		}
+		snprintf(c->repr, sizeof(c->repr), "%s", chord);
 		keysym = XCB_NO_SYMBOL;
 		button = XCB_NONE;
 		modfield = 0;

@@ -60,7 +60,7 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 		if (chain_is_dormant(c, chain_phase_at_entry))
 			continue;
 		if (match_chord(c->state, event_type, keysym, button, modfield)) {
-			if (status_fifo != NULL && num_active == 0) {
+			if (num_active == 0) {
 				if (chain_phase_at_entry == CHAIN_PHASE_IDLE) {
 					snprintf(progress, sizeof(progress), "%s", c->state->repr);
 				} else {
