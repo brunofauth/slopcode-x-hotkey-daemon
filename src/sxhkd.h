@@ -28,6 +28,7 @@
 #include <xcb/xcb_keysyms.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <signal.h>
 #include "types.h"
 #include "helpers.h"
 
@@ -59,7 +60,9 @@ extern int mapping_count;
 extern int timeout;
 
 extern hotkey_t *hotkeys_head, *hotkeys_tail;
-extern bool running, grabbed, toggle_grab, reload, bell;
+extern bool grabbed;
+/* Written from the signal handler, read by the main loop. */
+extern volatile sig_atomic_t running, toggle_grab, reload, bell;
 extern chain_phase_t chain_phase;
 extern xcb_keysym_t abort_keysym;
 extern chord_t *abort_chord;

@@ -57,7 +57,8 @@ int timeout;
 char sxhkd_pid[MAXLEN];
 
 hotkey_t *hotkeys_head, *hotkeys_tail;
-bool running, grabbed, toggle_grab, reload, bell;
+bool grabbed;
+volatile sig_atomic_t running, toggle_grab, reload, bell;
 chain_phase_t chain_phase;
 xcb_keysym_t abort_keysym;
 chord_t *abort_chord;
@@ -296,6 +297,10 @@ void key_button_event(xcb_generic_event_t *evt, uint8_t event_type)
 	if (keysym != XCB_NO_SYMBOL || button != XCB_NONE) {
 		hotkey_t *hk = find_hotkey(keysym, button, modfield, event_type, &replay_event);
 		if (hk != NULL) {
+			/* A synchronous command blocks this process until it finishes; let
+			 * the screen reflect the chain state before that rather than after. */
+			if (hk->sync)
+				indicator_sync_with_chain_phase(chain_phase, progress);
 			run(hk->command, hk->sync);
 			put_status(COMMAND_PREFIX, hk->command);
 		}
