@@ -78,6 +78,44 @@ Output status information to the given FIFO\&.
 .RS 4
 Name of the keysym used for aborting chord chains\&.
 .RE
+.PP
+\fB\-i\fR \fIPOSITION\fR
+.RS 4
+Show an on\-screen indicator while a chord chain is in progress, anchored at the given
+\fIPOSITION\fR
+of the screen:
+\fItop\-left\fR,
+\fItop\-right\fR,
+\fIbottom\-left\fR,
+\fIbottom\-right\fR
+or
+\fIcenter\fR\&.
+.RE
+.PP
+\fB\-f\fR \fIFONT\fR
+.RS 4
+Font of the chain indicator, as a Pango font description (default:
+\fImonospace 14\fR)\&. Only meaningful with
+\fB\-i\fR\&.
+.RE
+.PP
+\fB\-F\fR \fICOLOR\fR
+.RS 4
+Foreground color of the chain indicator, as
+\fI#rrggbb\fR
+(default:
+\fI#ffffff\fR)\&. Only meaningful with
+\fB\-i\fR\&.
+.RE
+.PP
+\fB\-B\fR \fICOLOR\fR
+.RS 4
+Background color of the chain indicator, as
+\fI#rrggbb\fR
+(default:
+\fI#222222\fR)\&. Only meaningful with
+\fB\-i\fR\&.
+.RE
 .SH "BEHAVIOR"
 .sp
 \fBsxhkd\fR is a daemon that listens to keyboard events and execute commands\&.
@@ -89,6 +127,8 @@ Additional configuration files can be passed as arguments\&.
 If \fBsxhkd\fR receives a \fISIGUSR1\fR (resp\&. \fISIGUSR2\fR) signal, it will reload its configuration file (resp\&. toggle the grabbing state of all its bindings)\&.
 .sp
 If \fBsxhkd\fR recieves a \fISIGALRM\fR signal, it will break the current chain if there is one in progress\&.
+.sp
+With the \fB\-i\fR option, \fBsxhkd\fR shows a small window while a chord chain is in progress\&. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below)\&. The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached\&. It never takes the keyboard focus\&.
 .sp
 The commands are executed via \fBSHELL\fR \fI\-c\fR \fBCOMMAND\fR (hence you can use environment variables)\&.
 .sp

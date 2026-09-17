@@ -48,6 +48,18 @@ Options
 *-a* _ABORT_KEYSYM_::
     Name of the keysym used for aborting chord chains.
 
+*-i* _POSITION_::
+    Show an on-screen indicator while a chord chain is in progress, anchored at the given _POSITION_ of the screen: _top-left_, _top-right_, _bottom-left_, _bottom-right_ or _center_.
+
+*-f* _FONT_::
+    Font of the chain indicator, as a Pango font description (default: _monospace 14_). Only meaningful with *-i*.
+
+*-F* _COLOR_::
+    Foreground color of the chain indicator, as _#rrggbb_ (default: _#ffffff_). Only meaningful with *-i*.
+
+*-B* _COLOR_::
+    Background color of the chain indicator, as _#rrggbb_ (default: _#222222_). Only meaningful with *-i*.
+
 
 Behavior
 --------
@@ -61,6 +73,8 @@ Additional configuration files can be passed as arguments.
 If *sxhkd* receives a _SIGUSR1_ (resp. _SIGUSR2_) signal, it will reload its configuration file (resp. toggle the grabbing state of all its bindings).
 
 If *sxhkd* recieves a _SIGALRM_ signal, it will break the current chain if there is one in progress.
+
+With the *-i* option, *sxhkd* shows a small window while a chord chain is in progress. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below). The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached. It never takes the keyboard focus.
 
 The commands are executed via *SHELL* _-c_ *COMMAND* (hence you can use environment variables).
 

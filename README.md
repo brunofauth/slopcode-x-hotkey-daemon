@@ -6,6 +6,15 @@ Its configuration file is a series of bindings that define the associations betw
 
 The format of the configuration file supports a simple notation for mapping multiple shortcuts to multiple commands in parallel.
 
+Chord chains (`super + m ; h`) and locked chains (`super + n : {h,j,k,l}`) act like modes. With the `-i` option, *sxhkd* shows a small on-screen indicator listing the chords received so far while a chain is in progress, so that you always know which mode you are in:
+
+	sxhkd -i top-right -f "monospace 14" -F '#ffffff' -B '#222222'
+
+## Dependencies
+
+- libxcb, xcb-util-keysyms, xcb-util (`xcb_event.h`)
+- cairo (with its xcb backend), pango and pangocairo, located through `pkg-config`
+
 ## Example Bindings
 
 	XF86Audio{Prev,Next}
