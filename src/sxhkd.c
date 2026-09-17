@@ -36,6 +36,7 @@
 #include <stdbool.h>
 #include "parse.h"
 #include "grab.h"
+#include "indicator.h"
 
 xcb_connection_t *dpy;
 xcb_screen_t *screen;
@@ -77,14 +78,23 @@ int main(int argc, char *argv[])
 	redir_fd = -1;
 	abort_keysym = ESCAPE_KEYSYM;
 
-	while ((opt = getopt(argc, argv, "hvm:t:c:r:s:a:")) != -1) {
+	indicator_config_t indicator_config;
+	indicator_config.position = INDICATOR_POSITION_TOP_RIGHT;
+	indicator_config.font_description_text = INDICATOR_DEFAULT_FONT_DESCRIPTION;
+	if (!indicator_parse_rgb_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &indicator_config.foreground_color)
+			|| !indicator_parse_rgb_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &indicator_config.background_color))
+		err("The built-in indicator colors are invalid.\n");
+	bool indicator_position_given = false;
+	bool indicator_look_given = false;
+
+	while ((opt = getopt(argc, argv, "hvm:t:c:r:s:a:i:f:F:B:")) != -1) {
 		switch (opt) {
 			case 'v':
 				printf("%s\n", VERSION);
 				exit(EXIT_SUCCESS);
 				break;
 			case 'h':
-				printf("sxhkd [-h|-v|-m COUNT|-t TIMEOUT|-c CONFIG_FILE|-r REDIR_FILE|-s STATUS_FIFO|-a ABORT_KEYSYM] [EXTRA_CONFIG ...]\n");
+				printf("sxhkd [-h|-v|-m COUNT|-t TIMEOUT|-c CONFIG_FILE|-r REDIR_FILE|-s STATUS_FIFO|-a ABORT_KEYSYM|-i POSITION|-f FONT|-F COLOR|-B COLOR] [EXTRA_CONFIG ...]\n");
 				exit(EXIT_SUCCESS);
 				break;
 			case 'm':
@@ -110,7 +120,38 @@ int main(int argc, char *argv[])
 					warn("Invalid keysym name: %s.\n", optarg);
 				}
 				break;
+			case 'i':
+				if (!indicator_parse_position(optarg, &indicator_config.position))
+					err("Invalid indicator position: '%s' (expected top-left, top-right, bottom-left, bottom-right or center).\n", optarg);
+				indicator_position_given = true;
+				break;
+			case 'f':
+				if (optarg[0] == '\0')
+					err("The indicator font description is empty.\n");
+				indicator_config.font_description_text = optarg;
+				indicator_look_given = true;
+				break;
+			case 'F':
+				if (!indicator_parse_rgb_color(optarg, &indicator_config.foreground_color))
+					err("Invalid indicator foreground color: '%s' (expected #rrggbb).\n", optarg);
+				indicator_look_given = true;
+				break;
+			case 'B':
+				if (!indicator_parse_rgb_color(optarg, &indicator_config.background_color))
+					err("Invalid indicator background color: '%s' (expected #rrggbb).\n", optarg);
+				indicator_look_given = true;
+				break;
 		}
+	}
+
+	if (indicator_look_given && !indicator_position_given)
+		warn("The -f, -F and -B options have no effect without -i.\n");
+	indicator_settings_t indicator_settings;
+	if (indicator_position_given) {
+		indicator_settings.kind = INDICATOR_SETTINGS_ENABLED;
+		indicator_settings.as.enabled = indicator_config;
+	} else {
+		indicator_settings.kind = INDICATOR_SETTINGS_DISABLED;
 	}
 
 	num_extra_confs = argc - optind;
@@ -143,6 +184,7 @@ int main(int argc, char *argv[])
 	signal(SIGALRM, hold);
 
 	setup();
+	indicator_init(&indicator_settings, dpy, screen);
 	get_standard_keysyms();
 	get_lock_fields();
 	abort_chord = make_chord(abort_keysym, XCB_NONE, 0, XCB_KEY_PRESS, false, false);
@@ -163,28 +205,37 @@ int main(int argc, char *argv[])
 	xcb_flush(dpy);
 
 	while (running) {
-		FD_ZERO(&descriptors);
-		FD_SET(fd, &descriptors);
-
-		if (select(fd + 1, &descriptors, NULL, NULL, NULL) > 0) {
-			while ((evt = xcb_poll_for_event(dpy)) != NULL) {
-				uint8_t event_type = XCB_EVENT_RESPONSE_TYPE(evt);
-				switch (event_type) {
-					case XCB_KEY_PRESS:
-					case XCB_KEY_RELEASE:
-					case XCB_BUTTON_PRESS:
-					case XCB_BUTTON_RELEASE:
-						key_button_event(evt, event_type);
-						break;
-					case XCB_MAPPING_NOTIFY:
-						mapping_notify(evt);
-						break;
-					default:
-						PRINTF("received event %u\n", event_type);
-						break;
-				}
-				free(evt);
+		/* Events that libxcb read while waiting for a reply (cairo-xcb does
+		 * that) sit in its queue without making the descriptor readable, so
+		 * look there before blocking in select(). */
+		evt = xcb_poll_for_queued_event(dpy);
+		if (evt == NULL) {
+			FD_ZERO(&descriptors);
+			FD_SET(fd, &descriptors);
+			if (select(fd + 1, &descriptors, NULL, NULL, NULL) > 0)
+				evt = xcb_poll_for_event(dpy);
+		}
+		while (evt != NULL) {
+			uint8_t event_type = XCB_EVENT_RESPONSE_TYPE(evt);
+			switch (event_type) {
+				case XCB_KEY_PRESS:
+				case XCB_KEY_RELEASE:
+				case XCB_BUTTON_PRESS:
+				case XCB_BUTTON_RELEASE:
+					key_button_event(evt, event_type);
+					break;
+				case XCB_MAPPING_NOTIFY:
+					mapping_notify(evt);
+					break;
+				case XCB_EXPOSE:
+					indicator_handle_expose((const xcb_expose_event_t *) evt);
+					break;
+				default:
+					PRINTF("received event %u\n", event_type);
+					break;
 			}
+			free(evt);
+			evt = xcb_poll_for_event(dpy);
 		}
 
 		if (reload) {
@@ -206,6 +257,10 @@ int main(int argc, char *argv[])
 			bell = false;
 		}
 
+		/* Every path that changes the recorder state (key events, timeout,
+		 * reload, mapping notify) has run by now; make the screen match. */
+		indicator_sync_with_chain_phase(chain_phase, progress);
+
 		if (xcb_connection_has_error(dpy)) {
 			warn("The server closed the connection.\n");
 			running = false;
@@ -221,6 +276,7 @@ int main(int argc, char *argv[])
 	}
 
 	ungrab();
+	indicator_shutdown();
 	cleanup();
 	destroy_chord(abort_chord);
 	xcb_key_symbols_free(symbols);

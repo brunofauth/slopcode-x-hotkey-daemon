@@ -58,6 +58,9 @@ void run(char *command, bool sync)
 
 void spawn(char *cmd[], bool sync)
 {
+	/* Children inherit the X connection and the chain indicator's cairo and
+	 * pango state in memory. They must neither use them nor call any
+	 * indicator function: they close the connection and exec or exit. */
 	if (fork() == 0) {
 		if (dpy != NULL)
 			close(xcb_get_file_descriptor(dpy));
