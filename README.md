@@ -1,3 +1,14 @@
+## This Fork
+
+I forked sxhkd (simple X hotkey daemon) into sxhkd (SLOPCODE X hotkey daemon),
+a fork which adds a visual indicator for key chains. Think of it like Vim's
+mode indicator, that improved on Vi's raw mode modeing. This extension could
+also have been a small separate binary reading sxhkd's existing FIFO interface,
+but that was so poorly documented that I only noticed it as a real option after
+already having forked the original project, so this is what you (we, mostly me)
+get.
+
+
 ## Description
 
 *sxhkd* is an X daemon that reacts to input events by executing commands.
