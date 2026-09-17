@@ -24,7 +24,6 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include "indicator_core.h"
@@ -99,11 +98,18 @@ static void bounded_writer_append(bounded_writer_t *writer, const char *text)
 /* Appends [chord_begin, chord_end) without its surrounding blanks. Chord texts
  * are raw configuration tokens and keep the blanks that surrounded their
  * separator, e.g. "super + m " and " h" for "super + m ; h". */
+static bool is_blank_byte(char byte)
+{
+	/* Deliberately not isblank(): locale-independent, and never trims the
+	 * bytes of a multi-byte character. */
+	return byte == ' ' || byte == '\t';
+}
+
 static void bounded_writer_append_trimmed(bounded_writer_t *writer, const char *chord_begin, const char *chord_end)
 {
-	while (chord_begin < chord_end && !isgraph((unsigned char) *chord_begin))
+	while (chord_begin < chord_end && is_blank_byte(*chord_begin))
 		chord_begin++;
-	while (chord_end > chord_begin && !isgraph((unsigned char) chord_end[-1]))
+	while (chord_end > chord_begin && is_blank_byte(chord_end[-1]))
 		chord_end--;
 	for (const char *cursor = chord_begin; cursor < chord_end; cursor++)
 		bounded_writer_append_character(writer, *cursor);

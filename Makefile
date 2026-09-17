@@ -22,7 +22,7 @@ STRICT_CFLAGS = -Wshadow -Wconversion -Wsign-conversion -Wstrict-prototypes -Wmi
                 -Wold-style-definition -Wvla -Wswitch-enum -Wcast-qual -Wundef -Wdouble-promotion \
                 -Wformat=2 -Wnull-dereference -Wimplicit-fallthrough
 TEST_CFLAGS  ?= -fsanitize=address,undefined
-LDLIBS    = $(LDFLAGS) -lxcb -lxcb-keysyms -lxcb-xkb $(INDICATOR_LIBS)
+LDLIBS    = $(LDFLAGS) -lxcb -lxcb-keysyms -lxcb-xkb -lxcb-shape $(INDICATOR_LIBS)
 
 PREFIX    ?= /usr/local
 BINPREFIX ?= $(PREFIX)/bin

@@ -36,8 +36,9 @@
 #  define PRINTF(x,...)   ((void)0)
 #endif
 
+__attribute__((format(printf, 1, 2)))
 void warn(char *fmt, ...);
-__attribute__((noreturn))
+__attribute__((noreturn, format(printf, 1, 2)))
 void err(char *fmt, ...);
 void execute(char *cmd[]);
 void spawn(char *cmd[], bool sync);

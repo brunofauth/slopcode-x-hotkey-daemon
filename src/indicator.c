@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <xcb/shape.h>
 #include <xcb/xcb.h>
 #include "indicator.h"
 
@@ -85,7 +86,7 @@ typedef struct {
 
 static indicator_t indicator_singleton = {.kind = INDICATOR_DISABLED};
 
-static xcb_visualtype_t *find_visual_type(xcb_screen_t *screen_of_window, xcb_visualid_t wanted_visual_id)
+static xcb_visualtype_t *find_visual_type(const xcb_screen_t *screen_of_window, xcb_visualid_t wanted_visual_id)
 {
 	xcb_depth_iterator_t depth_iterator = xcb_screen_allowed_depths_iterator(screen_of_window);
 	for (; depth_iterator.rem > 0; xcb_depth_next(&depth_iterator)) {
@@ -129,6 +130,17 @@ static uint32_t pixel_from_rgb_color(const xcb_visualtype_t *visual_type, const 
 		| scale_component_into_channel(color.blue, visual_type->blue_mask);
 }
 
+/* With the Shape extension, an empty input region lets pointer events fall
+ * through the banner to whatever lies beneath it. Without the extension the
+ * banner merely swallows clicks on its own small area. */
+static void make_window_transparent_to_input(xcb_connection_t *connection, xcb_window_t window)
+{
+	const xcb_query_extension_reply_t *shape_extension = xcb_get_extension_data(connection, &xcb_shape_id);
+	if (shape_extension == NULL || !shape_extension->present)
+		return;
+	xcb_shape_rectangles(connection, XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, XCB_CLIP_ORDERING_UNSORTED, window, 0, 0, 0, NULL);
+}
+
 static int available_text_width_in_pango_units(pixel_size_t screen_size)
 {
 	int32_t available_width_in_pixels = (int32_t) screen_size.width - 2 * INDICATOR_MARGIN_IN_PIXELS - 2 * INDICATOR_PADDING_IN_PIXELS;
@@ -156,7 +168,7 @@ static void set_source_from_rgb_color(cairo_t *cairo_context, rgb_color_t color)
 	cairo_set_source_rgb(cairo_context, color.red / 255.0, color.green / 255.0, color.blue / 255.0);
 }
 
-static cairo_status_t paint_banner(indicator_resources_t *resources)
+static cairo_status_t paint_banner(const indicator_resources_t *resources)
 {
 	cairo_t *cairo_context = resources->cairo_context;
 	set_source_from_rgb_color(cairo_context, resources->config.background_color);
@@ -286,6 +298,7 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 		free(create_error);
 		err("Indicator: can't create the window (X error %u).\n", error_code);
 	}
+	make_window_transparent_to_input(connection, window);
 
 	cairo_surface_t *surface = cairo_xcb_surface_create(connection, window, visual_type, 1, 1);
 	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
