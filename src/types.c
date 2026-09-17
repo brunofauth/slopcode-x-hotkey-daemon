@@ -30,19 +30,38 @@
 #include "parse.h"
 #include "grab.h"
 
+/* Whether a chain takes no part in matching the current event, given the
+ * phase the recorder was in when the event arrived. */
+static bool chain_is_dormant(const chain_t *chain, chain_phase_t chain_phase_at_entry)
+{
+	switch (chain_phase_at_entry) {
+		case CHAIN_PHASE_IDLE:
+			return false;
+		case CHAIN_PHASE_IN_PROGRESS:
+			return chain->state == chain->head;
+		case CHAIN_PHASE_LOCKED:
+			return chain->state == chain->head || chain->state != chain->tail;
+	}
+	return false;
+}
+
 hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield, uint8_t event_type, bool *replay_event)
 {
+	/* The loop below never changes the phase: its only call to abort_chain()
+	 * is immediately followed by a return. Everything inside the loop therefore
+	 * reasons about the phase as it was when the event arrived. */
+	const chain_phase_t chain_phase_at_entry = chain_phase;
 	int num_active = 0;
 	int num_locked = 0;
 	hotkey_t *result = NULL;
 
 	for (hotkey_t *hk = hotkeys_head; hk != NULL; hk = hk->next) {
 		chain_t *c = hk->chain;
-		if ((chained && c->state == c->head) || (locked && c->state != c->tail))
+		if (chain_is_dormant(c, chain_phase_at_entry))
 			continue;
 		if (match_chord(c->state, event_type, keysym, button, modfield)) {
 			if (status_fifo != NULL && num_active == 0) {
-				if (!chained) {
+				if (chain_phase_at_entry == CHAIN_PHASE_IDLE) {
 					snprintf(progress, sizeof(progress), "%s", c->state->repr);
 				} else {
 					strncat(progress, ";", sizeof(progress) - strlen(progress) - 1);
@@ -65,7 +84,7 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 						result = hk;
 					continue;
 				}
-				if (chained && !locked)
+				if (chain_phase_at_entry == CHAIN_PHASE_IN_PROGRESS)
 					abort_chain();
 				return hk;
 			} else {
@@ -73,32 +92,45 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 				num_active++;
 				grab_chord(c->state);
 			}
-		} else if (chained) {
-			if (!locked && c->state->event_type == event_type)
-				c->state = c->head;
-			else
-				num_active++;
+		} else {
+			switch (chain_phase_at_entry) {
+				case CHAIN_PHASE_IDLE:
+					break;
+				case CHAIN_PHASE_IN_PROGRESS:
+					if (c->state->event_type == event_type)
+						c->state = c->head;
+					else
+						num_active++;
+					break;
+				case CHAIN_PHASE_LOCKED:
+					num_active++;
+					break;
+			}
 		}
 	}
 
 	if (result != NULL)
 		return result;
 
-	if (num_locked > 0) {
-		locked = true;
+	switch (chain_phase_at_entry) {
+		case CHAIN_PHASE_IDLE:
+			if (num_active > 0) {
+				chain_phase = (num_locked > 0) ? CHAIN_PHASE_LOCKED : CHAIN_PHASE_IN_PROGRESS;
+				put_status(BEGIN_CHAIN_PREFIX, "Begin chain");
+				grab_chord(abort_chord);
+			}
+			break;
+		case CHAIN_PHASE_IN_PROGRESS:
+		case CHAIN_PHASE_LOCKED:
+			if (num_locked > 0)
+				chain_phase = CHAIN_PHASE_LOCKED;
+			if (num_active == 0 || match_chord(abort_chord, event_type, keysym, button, modfield)) {
+				abort_chain();
+				return find_hotkey(keysym, button, modfield, event_type, replay_event);
+			}
+			break;
 	}
-
-	if (!chained) {
-		if (num_active > 0) {
-			chained = true;
-			put_status(BEGIN_CHAIN_PREFIX, "Begin chain");
-			grab_chord(abort_chord);
-		}
-	} else if (num_active == 0 || match_chord(abort_chord, event_type, keysym, button, modfield)) {
-		abort_chain();
-		return find_hotkey(keysym, button, modfield, event_type, replay_event);
-	}
-	if (chained && !locked && timeout > 0)
+	if (chain_phase == CHAIN_PHASE_IN_PROGRESS && timeout > 0)
 		alarm(timeout);
 	PRINTF("num active %i\n", num_active);
 
@@ -249,8 +281,7 @@ void abort_chain(void)
 	put_status(END_CHAIN_PREFIX, "End chain");
 	for (hotkey_t *hk = hotkeys_head; hk != NULL; hk = hk->next)
 		hk->chain->state = hk->chain->head;
-	chained = false;
-	locked = false;
+	chain_phase = CHAIN_PHASE_IDLE;
 	if (timeout > 0)
 		alarm(0);
 	ungrab();

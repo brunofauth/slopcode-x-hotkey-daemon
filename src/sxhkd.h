@@ -58,7 +58,8 @@ extern int mapping_count;
 extern int timeout;
 
 extern hotkey_t *hotkeys_head, *hotkeys_tail;
-extern bool running, grabbed, toggle_grab, reload, bell, chained, locked;
+extern bool running, grabbed, toggle_grab, reload, bell;
+extern chain_phase_t chain_phase;
 extern xcb_keysym_t abort_keysym;
 extern chord_t *abort_chord;
 

@@ -28,6 +28,7 @@
 #include <xcb/xcb_keysyms.h>
 #include <stdbool.h>
 #include "helpers.h"
+#include "chain_phase.h"
 
 #define KEYSYMS_PER_KEYCODE  4
 #define MOD_STATE_FIELD      255

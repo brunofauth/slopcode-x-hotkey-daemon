@@ -55,7 +55,8 @@ int timeout;
 char sxhkd_pid[MAXLEN];
 
 hotkey_t *hotkeys_head, *hotkeys_tail;
-bool running, grabbed, toggle_grab, reload, bell, chained, locked;
+bool running, grabbed, toggle_grab, reload, bell;
+chain_phase_t chain_phase;
 xcb_keysym_t abort_keysym;
 chord_t *abort_chord;
 
@@ -154,7 +155,8 @@ int main(int argc, char *argv[])
 
 	fd_set descriptors;
 
-	reload = toggle_grab = bell = chained = locked = false;
+	reload = toggle_grab = bell = false;
+	chain_phase = CHAIN_PHASE_IDLE;
 	running = true;
 
 	xcb_flush(dpy);
