@@ -2698,7 +2698,14 @@ bool parse_chain(char *string, chain_t *chain)
 			return false;
 		}
 		add_chord(chain, c);
-		snprintf(c->repr, sizeof(c->repr), "%s", chord);
+		/* Keep the chord's text as written, minus the blanks that surrounded
+		 * its separator, for status reports and the chain indicator. */
+		char *repr_begin = lgraph(chord);
+		char *repr_end = rgraph(chord);
+		if (repr_begin != NULL && repr_end != NULL)
+			snprintf(c->repr, sizeof(c->repr), "%.*s", (int) (repr_end - repr_begin + 1), repr_begin);
+		else
+			c->repr[0] = '\0';
 		keysym = XCB_NO_SYMBOL;
 		button = XCB_NONE;
 		modfield = 0;
