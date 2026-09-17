@@ -43,6 +43,7 @@
 #define TIMEOUT              3
 
 extern xcb_connection_t *dpy;
+extern xcb_screen_t *screen;
 extern xcb_window_t root;
 extern xcb_key_symbols_t *symbols;
 

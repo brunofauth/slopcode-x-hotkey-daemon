@@ -38,6 +38,7 @@
 #include "grab.h"
 
 xcb_connection_t *dpy;
+xcb_screen_t *screen;
 xcb_window_t root;
 xcb_key_symbols_t *symbols;
 
@@ -288,7 +289,7 @@ void setup(void)
 		err("Can't open display.\n");
 	xcb_xkb_use_extension(dpy, XCB_XKB_MAJOR_VERSION, XCB_XKB_MINOR_VERSION);
 	xcb_xkb_per_client_flags(dpy, XCB_XKB_ID_USE_CORE_KBD, XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT, 1, 0, 0, 0);
-	xcb_screen_t *screen = NULL;
+	screen = NULL;
 	xcb_screen_iterator_t screen_iter = xcb_setup_roots_iterator(xcb_get_setup(dpy));
 	for (; screen_iter.rem; xcb_screen_next(&screen_iter), screen_idx--) {
 		if (screen_idx == 0) {
