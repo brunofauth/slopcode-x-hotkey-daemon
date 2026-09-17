@@ -43,7 +43,7 @@ Options
     Redirect the commands output to the given file.
 
 *-s* _STATUS_FIFO_::
-    Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO must already exist.
+    Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO is created if it does not exist.
 
 *-a* _ABORT_KEYSYM_::
     Name of the keysym used for aborting chord chains.
@@ -90,7 +90,7 @@ Status FIFO
 
 With the *-s* option, *sxhkd* reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, …) can display the chord chain in progress or react to the commands being run.
 
-The pipe must be created beforehand, for instance with *mkfifo*. *sxhkd* opens it for reading and writing in non-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe; if the pipe cannot be opened, a warning is printed and no status is reported. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards.
+*sxhkd* creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place. Anything else at the path, or a pipe that cannot be created or opened, is a startup error. *sxhkd* opens the pipe for reading and writing in non-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards.
 
 Each message is a single line made of a one-character prefix followed by a text:
 
@@ -134,11 +134,11 @@ EEnd chain
 Cecho H
 ----
 
-A minimal consumer creates the pipe, starts *sxhkd* on it, and reads it line by line, stripping the prefix:
+A minimal consumer starts *sxhkd* on a pipe, waits for the pipe to appear, and reads it line by line, stripping the prefix:
 
 ----
-mkfifo "$XDG_RUNTIME_DIR/sxhkd.fifo"
 sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+until [ -p "$XDG_RUNTIME_DIR/sxhkd.fifo" ]; do sleep 0.1; done
 
 while read -r line; do
     case $line in

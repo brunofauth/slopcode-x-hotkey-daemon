@@ -54,7 +54,28 @@ extern char *config_path;
 extern char **extra_confs;
 extern int num_extra_confs;
 extern int redir_fd;
-extern FILE *status_fifo;
+typedef enum {
+	STATUS_FIFO_ABSENT,    /* -s not given */
+	STATUS_FIFO_PRESENT
+} status_fifo_kind_t;
+
+typedef enum {
+	STATUS_FIFO_INHERITED, /* the FIFO existed already: left in place at exit */
+	STATUS_FIFO_CREATED    /* created by sxhkd: removed at exit */
+} status_fifo_ownership_t;
+
+typedef struct {
+	status_fifo_kind_t kind;
+	union {
+		struct {
+			FILE *stream;
+			status_fifo_ownership_t ownership;
+			const char *path;   /* points into argv[]: process lifetime */
+		} present;
+	} as;
+} status_fifo_t;
+
+extern status_fifo_t status_fifo;
 extern char progress[3 * MAXLEN];
 extern int mapping_count;
 extern int timeout;
@@ -81,6 +102,8 @@ void cleanup(void);
 void reload_cmd(void);
 void toggle_grab_cmd(void);
 void hold(int sig);
+status_fifo_t open_status_fifo(const char *fifo_path);
+void close_status_fifo(void);
 void put_status(char c, const char *s);
 
 #endif

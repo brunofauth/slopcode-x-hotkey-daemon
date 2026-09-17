@@ -4,6 +4,9 @@
 
 status_fifo=$1
 
+# sxhkd creates the fifo; wait for it in case this script starts first.
+until [ -p "$status_fifo" ] ; do sleep 0.1 ; done
+
 { while read -r line ; do 
     msg=${line#?}
     case $line in

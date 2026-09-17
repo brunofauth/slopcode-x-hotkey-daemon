@@ -31,10 +31,10 @@ always know which mode you are in:
 
 With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that
 a notification script or a status bar can show the chord chain in progress or
-react to the commands being run. Create the pipe first, then point *sxhkd* at
-it:
+react to the commands being run. *sxhkd* creates the pipe (owner-only) if it
+does not exist and removes it at exit in that case; an existing pipe is used and
+left alone, anything else at the path is a startup error:
 
-	mkfifo "$XDG_RUNTIME_DIR/sxhkd.fifo"
 	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
 
 Each message is one line: a one-character prefix, then a text.
@@ -55,9 +55,10 @@ Pressing `super + m` then `h` for the binding `super + m ; h` produces:
 	EEnd chain
 	Cecho H
 
-A single-chord binding only produces its `H` and `C` lines. A consumer reads
-the pipe line by line and strips the prefix:
+A single-chord binding only produces its `H` and `C` lines. A consumer waits
+for the pipe, then reads it line by line and strips the prefix:
 
+	until [ -p "$XDG_RUNTIME_DIR/sxhkd.fifo" ]; do sleep 0.1; done
 	while read -r line; do
 	    case $line in
 	        H*) notify-send -t 2000 "sxhkd" "${line#?}" ;;

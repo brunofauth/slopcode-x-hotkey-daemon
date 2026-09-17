@@ -24,8 +24,10 @@
 
 #include <xcb/xcb_event.h>
 #include <xcb/xkb.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/select.h>
@@ -49,7 +51,7 @@ char *config_path;
 char **extra_confs;
 int num_extra_confs;
 int redir_fd;
-FILE *status_fifo;
+status_fifo_t status_fifo;
 char progress[3 * MAXLEN];
 int mapping_count;
 int timeout;
@@ -72,7 +74,7 @@ int main(int argc, char *argv[])
 {
 	int opt;
 	char *fifo_path = NULL;
-	status_fifo = NULL;
+	status_fifo.kind = STATUS_FIFO_ABSENT;
 	config_path = NULL;
 	mapping_count = 0;
 	timeout = TIMEOUT;
@@ -169,14 +171,8 @@ int main(int argc, char *argv[])
 		snprintf(config_file, sizeof(config_file), "%s", config_path);
 	}
 
-	if (fifo_path != NULL) {
-		int fifo_fd = open(fifo_path, O_RDWR | O_NONBLOCK);
-		if (fifo_fd != -1) {
-			status_fifo = fdopen(fifo_fd, "w");
-		} else {
-			warn("Couldn't open status fifo.\n");
-		}
-	}
+	if (fifo_path != NULL)
+		status_fifo = open_status_fifo(fifo_path);
 
 	signal(SIGINT, hold);
 	signal(SIGHUP, hold);
@@ -293,9 +289,7 @@ int main(int argc, char *argv[])
 		close(redir_fd);
 	}
 
-	if (status_fifo != NULL) {
-		fclose(status_fifo);
-	}
+	close_status_fifo();
 
 	ungrab();
 	indicator_shutdown();
@@ -448,11 +442,93 @@ void hold(int sig)
 		bell = true;
 }
 
+/* Aborts startup because the status FIFO is unusable, removing it first if
+ * this run created it. There is deliberately no atexit() handler for the
+ * removal: spawn()'s children exit through exit()/err() too and must never
+ * remove the FIFO under the running daemon. As a consequence a fatal error
+ * later in startup leaves a created FIFO behind, which the next run reuses. */
+static void fail_status_fifo(const char *fifo_path, status_fifo_ownership_t ownership, const char *problem)
+{
+	const int saved_errno = errno;
+	switch (ownership) {
+		case STATUS_FIFO_INHERITED:
+			break;
+		case STATUS_FIFO_CREATED:
+			unlink(fifo_path);
+			break;
+	}
+	err("%s the status fifo '%s': %s.\n", problem, fifo_path, strerror(saved_errno));
+}
+
+/* Creates the FIFO if nothing exists at the path, opens it and verifies that
+ * what was opened really is a FIFO (on the descriptor, so that the check
+ * cannot be raced). A pre-existing FIFO is used as-is and left in place. */
+status_fifo_t open_status_fifo(const char *fifo_path)
+{
+	status_fifo_ownership_t ownership = STATUS_FIFO_INHERITED;
+	if (mkfifo(fifo_path, S_IRUSR | S_IWUSR) == 0)
+		ownership = STATUS_FIFO_CREATED;
+	else if (errno != EEXIST)
+		fail_status_fifo(fifo_path, ownership, "Can't create");
+
+	const int fifo_fd = open(fifo_path, O_RDWR | O_NONBLOCK);
+	if (fifo_fd == -1)
+		fail_status_fifo(fifo_path, ownership, "Can't open");
+
+	struct stat fifo_status;
+	if (fstat(fifo_fd, &fifo_status) != 0)
+		fail_status_fifo(fifo_path, ownership, "Can't inspect");
+	if (!S_ISFIFO(fifo_status.st_mode)) {
+		errno = 0;
+		switch (ownership) {
+			case STATUS_FIFO_INHERITED:
+				break;
+			case STATUS_FIFO_CREATED:
+				unlink(fifo_path);
+				break;
+		}
+		err("The status fifo path '%s' is not a fifo.\n", fifo_path);
+	}
+
+	FILE *stream = fdopen(fifo_fd, "w");
+	if (stream == NULL)
+		fail_status_fifo(fifo_path, ownership, "Can't open");
+
+	status_fifo_t opened;
+	opened.kind = STATUS_FIFO_PRESENT;
+	opened.as.present.stream = stream;
+	opened.as.present.ownership = ownership;
+	opened.as.present.path = fifo_path;
+	return opened;
+}
+
+void close_status_fifo(void)
+{
+	switch (status_fifo.kind) {
+		case STATUS_FIFO_ABSENT:
+			return;
+		case STATUS_FIFO_PRESENT:
+			break;
+	}
+	fclose(status_fifo.as.present.stream);
+	switch (status_fifo.as.present.ownership) {
+		case STATUS_FIFO_INHERITED:
+			break;
+		case STATUS_FIFO_CREATED:
+			unlink(status_fifo.as.present.path);
+			break;
+	}
+	status_fifo.kind = STATUS_FIFO_ABSENT;
+}
+
 void put_status(char c, const char *s)
 {
-	if (status_fifo == NULL) {
-		return;
+	switch (status_fifo.kind) {
+		case STATUS_FIFO_ABSENT:
+			return;
+		case STATUS_FIFO_PRESENT:
+			break;
 	}
-	fprintf(status_fifo, "%c%s\n", c, s);
-	fflush(status_fifo);
+	fprintf(status_fifo.as.present.stream, "%c%s\n", c, s);
+	fflush(status_fifo.as.present.stream);
 }

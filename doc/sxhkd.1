@@ -73,7 +73,7 @@ Redirect the commands output to the given file\&.
 .RS 4
 Output status information to the given FIFO (see the
 \fIStatus FIFO\fR
-section)\&. The FIFO must already exist\&.
+section)\&. The FIFO is created if it does not exist\&.
 .RE
 .PP
 \fB\-a\fR \fIABORT_KEYSYM\fR
@@ -143,7 +143,7 @@ If you have a non\-QWERTY keyboard or a non\-standard layout configuration, you 
 .sp
 With the \fB\-s\fR option, \fBsxhkd\fR reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, \&...) can display the chord chain in progress or react to the commands being run\&.
 .sp
-The pipe must be created beforehand, for instance with \fBmkfifo\fR\&. \fBsxhkd\fR opens it for reading and writing in non\-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe; if the pipe cannot be opened, a warning is printed and no status is reported\&. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards\&.
+\fBsxhkd\fR creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place\&. Anything else at the path, or a pipe that cannot be created or opened, is a startup error\&. \fBsxhkd\fR opens the pipe for reading and writing in non\-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe\&. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards\&.
 .sp
 Each message is a single line made of a one\-character prefix followed by a text:
 .sp
@@ -211,14 +211,14 @@ Cecho H
 .RE
 .\}
 .sp
-A minimal consumer creates the pipe, starts \fBsxhkd\fR on it, and reads it line by line, stripping the prefix:
+A minimal consumer starts \fBsxhkd\fR on a pipe, waits for the pipe to appear, and reads it line by line, stripping the prefix:
 .sp
 .if n \{\
 .RS 4
 .\}
 .nf
-mkfifo "$XDG_RUNTIME_DIR/sxhkd\&.fifo"
 sxhkd \-s "$XDG_RUNTIME_DIR/sxhkd\&.fifo" &
+until [ \-p "$XDG_RUNTIME_DIR/sxhkd\&.fifo" ]; do sleep 0\&.1; done
 
 while read \-r line; do
     case $line in
