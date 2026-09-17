@@ -1,0 +1,39 @@
+# Maintainer: Bruno Fauth <brunovfauth@gmail.com>
+pkgname=sxhkd-git
+pkgver=0.7.0.r1.g4ce667b
+pkgrel=1
+pkgdesc='Simple X hotkey daemon, with an on-screen chord-chain indicator'
+arch=('x86_64' 'aarch64')
+url='https://github.com/brunofauth/slopcode-x-hotkey-daemon'
+license=('BSD-2-Clause')
+depends=('libxcb' 'xcb-util' 'xcb-util-keysyms' 'cairo' 'pango')
+makedepends=('git' 'pkgconf')
+provides=('sxhkd')
+conflicts=('sxhkd')
+# By default this builds the repository the PKGBUILD lives in, so nothing has
+# to be pushed anywhere; set SXHKD_GIT_URL (for instance to "$url.git") to
+# build another clone instead.
+_repository_url="${SXHKD_GIT_URL:-file://$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
+source=("sxhkd::git+${_repository_url}")
+sha256sums=('SKIP')
+
+pkgver() {
+	cd sxhkd
+	git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+	cd sxhkd
+	make
+}
+
+check() {
+	cd sxhkd
+	make check
+}
+
+package() {
+	cd sxhkd
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+	install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}

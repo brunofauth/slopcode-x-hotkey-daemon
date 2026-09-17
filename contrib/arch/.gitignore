@@ -1,0 +1,6 @@
+# makepkg's source checkout, build tree and outputs
+/sxhkd/
+/src/
+/pkg/
+/*.pkg.tar*
+/*.log

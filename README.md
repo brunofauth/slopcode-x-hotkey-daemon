@@ -13,17 +13,26 @@ get.
 
 *sxhkd* is an X daemon that reacts to input events by executing commands.
 
-Its configuration file is a series of bindings that define the associations between the input events and the commands.
+Its configuration file is a series of bindings that define the associations
+between the input events and the commands.
 
-The format of the configuration file supports a simple notation for mapping multiple shortcuts to multiple commands in parallel.
+The format of the configuration file supports a simple notation for mapping
+multiple shortcuts to multiple commands in parallel.
 
-Chord chains (`super + m ; h`) and locked chains (`super + n : {h,j,k,l}`) act like modes. With the `-i` option, *sxhkd* shows a small on-screen indicator listing the chords received so far while a chain is in progress, so that you always know which mode you are in:
+Chord chains (`super + m ; h`) and locked chains (`super + n : {h,j,k,l}`) act
+like modes. With the `-i` option, *sxhkd* shows a small on-screen indicator
+listing the chords received so far while a chain is in progress, so that you
+always know which mode you are in:
 
 	sxhkd -i top-right -f "monospace 14" -F '#ffffff' -B '#222222'
 
+
 ## Status FIFO
 
-With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that a notification script or a status bar can show the chord chain in progress or react to the commands being run. Create the pipe first, then point *sxhkd* at it:
+With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that
+a notification script or a status bar can show the chord chain in progress or
+react to the commands being run. Create the pipe first, then point *sxhkd* at
+it:
 
 	mkfifo "$XDG_RUNTIME_DIR/sxhkd.fifo"
 	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
@@ -46,7 +55,8 @@ Pressing `super + m` then `h` for the binding `super + m ; h` produces:
 	EEnd chain
 	Cecho H
 
-A single-chord binding only produces its `H` and `C` lines. A consumer reads the pipe line by line and strips the prefix:
+A single-chord binding only produces its `H` and `C` lines. A consumer reads
+the pipe line by line and strips the prefix:
 
 	while read -r line; do
 	    case $line in
@@ -56,12 +66,32 @@ A single-chord binding only produces its `H` and `C` lines. A consumer reads the
 	    esac
 	done < "$XDG_RUNTIME_DIR/sxhkd.fifo"
 
-See `examples/notification` for a complete setup, and the man page for the details of when each message is sent.
+See `examples/notification` for a complete setup, and the man page for the
+details of when each message is sent.
+
 
 ## Dependencies
 
 - libxcb, xcb-util-keysyms, xcb-util (`xcb_event.h`)
-- cairo (with its xcb backend), pango and pangocairo, located through `pkg-config`
+- cairo (with its xcb backend), pango and pangocairo, located through
+  `pkg-config`
+
+
+### Arch Linux
+
+`contrib/arch/PKGBUILD` builds the checkout it lives in as the `sxhkd-git`
+package, which replaces the official `sxhkd`:
+
+	cd contrib/arch && makepkg -si
+
+Set `SXHKD_GIT_URL` to a clone URL to build another repository instead.
+
+
+### Nix
+
+`nix build` produces the package, `nix flake check` also runs the static
+analysis, and `nix develop` opens a shell with every build and test tool.
+
 
 ## Example Bindings
 
@@ -111,6 +141,7 @@ See `examples/notification` for a complete setup, and the man page for the detai
 	  , d1=right;  d2=left;   dx=$n;  dy=0;   \
 	  } \
 	  bspc node --resize $d1 $dx $dy || bspc node --resize $d2 $dx $dy
+
 
 ## Editor Plugins
 
