@@ -2,6 +2,8 @@ grab.o: grab.c chain_phase.h grab.h helpers.h parse.h sxhkd.h types.h
 OBJ += grab.o
 helpers.o: helpers.c chain_phase.h helpers.h sxhkd.h types.h
 OBJ += helpers.o
+indicator.o: indicator.c chain_phase.h helpers.h indicator.h indicator_core.h
+OBJ += indicator.o
 indicator_core.o: indicator_core.c chain_phase.h helpers.h indicator_core.h
 OBJ += indicator_core.o
 parse.o: parse.c chain_phase.h helpers.h locales.h parse.h sxhkd.h types.h
