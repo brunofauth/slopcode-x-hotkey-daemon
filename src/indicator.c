@@ -35,10 +35,27 @@
 #include "indicator.h"
 
 /* Everything the enabled indicator owns. Exists iff the indicator is enabled. */
+typedef enum {
+	WINDOW_VISUAL_ARGB,    /* a depth-32 TrueColor visual: alpha is honored by a compositing manager */
+	WINDOW_VISUAL_OPAQUE   /* the root visual: alpha is dropped */
+} window_visual_kind_t;
+
+typedef struct {
+	window_visual_kind_t kind;
+	xcb_visualtype_t *visual_type;
+	uint8_t depth;
+	union {
+		struct {
+			xcb_colormap_t colormap;   /* windows on a non-root visual need their own */
+		} argb;                        /* valid iff kind == WINDOW_VISUAL_ARGB */
+	} as;
+} window_visual_t;
+
 typedef struct {
 	xcb_connection_t *connection;
 	xcb_window_t root_window;
 	xcb_window_t window;
+	window_visual_t visual;
 	cairo_device_t *device;
 	cairo_surface_t *surface;
 	cairo_t *cairo_context;
@@ -100,6 +117,68 @@ static xcb_visualtype_t *find_visual_type(const xcb_screen_t *screen_of_window, 
 	return NULL;
 }
 
+static xcb_visualtype_t *find_argb_visual_type(const xcb_screen_t *screen_of_window)
+{
+	xcb_depth_iterator_t depth_iterator = xcb_screen_allowed_depths_iterator(screen_of_window);
+	for (; depth_iterator.rem > 0; xcb_depth_next(&depth_iterator)) {
+		if (depth_iterator.data->depth != 32)
+			continue;
+		xcb_visualtype_iterator_t visual_iterator = xcb_depth_visuals_iterator(depth_iterator.data);
+		for (; visual_iterator.rem > 0; xcb_visualtype_next(&visual_iterator)) {
+			if (visual_iterator.data->_class == XCB_VISUAL_CLASS_TRUE_COLOR)
+				return visual_iterator.data;
+		}
+	}
+	return NULL;
+}
+
+/* Prefers a depth-32 visual, which the Composite extension provides on every
+ * modern server, so that translucent colors work under a compositing manager;
+ * falls back to the root visual otherwise. */
+static window_visual_t choose_window_visual(xcb_connection_t *connection, const xcb_screen_t *screen_of_window)
+{
+	xcb_visualtype_t *argb_visual_type = find_argb_visual_type(screen_of_window);
+	if (argb_visual_type != NULL) {
+		const xcb_colormap_t colormap = xcb_generate_id(connection);
+		xcb_create_colormap(connection, XCB_COLORMAP_ALLOC_NONE, colormap, screen_of_window->root, argb_visual_type->visual_id);
+		const window_visual_t argb_visual = {
+			.kind = WINDOW_VISUAL_ARGB,
+			.visual_type = argb_visual_type,
+			.depth = 32,
+			.as.argb.colormap = colormap,
+		};
+		return argb_visual;
+	}
+	xcb_visualtype_t *root_visual_type = find_visual_type(screen_of_window, screen_of_window->root_visual);
+	if (root_visual_type == NULL)
+		err("Indicator: can't find the root visual.\n");
+	const window_visual_t opaque_visual = {
+		.kind = WINDOW_VISUAL_OPAQUE,
+		.visual_type = root_visual_type,
+		.depth = screen_of_window->root_depth,
+	};
+	return opaque_visual;
+}
+
+/* Whether a compositing manager owns the _NET_WM_CM_S<screen> selection, the
+ * EWMH way of announcing that windows' alpha channels are honored. */
+static bool compositing_manager_is_running(xcb_connection_t *connection, int screen_number)
+{
+	char selection_name[32];
+	snprintf(selection_name, sizeof(selection_name), "_NET_WM_CM_S%d", screen_number);
+	xcb_intern_atom_reply_t *atom_reply = xcb_intern_atom_reply(connection, xcb_intern_atom(connection, 0, (uint16_t) strlen(selection_name), selection_name), NULL);
+	if (atom_reply == NULL)
+		return false;
+	const xcb_atom_t selection_atom = atom_reply->atom;
+	free(atom_reply);
+	xcb_get_selection_owner_reply_t *owner_reply = xcb_get_selection_owner_reply(connection, xcb_get_selection_owner(connection, selection_atom), NULL);
+	if (owner_reply == NULL)
+		return false;
+	const bool running = owner_reply->owner != XCB_NONE;
+	free(owner_reply);
+	return running;
+}
+
 /* Places an 8-bit color component into the bits selected by a channel mask of
  * a TrueColor/DirectColor visual, rescaling it to the channel's width. */
 static uint32_t scale_component_into_channel(uint8_t component, uint32_t channel_mask)
@@ -122,7 +201,7 @@ static uint32_t scale_component_into_channel(uint8_t component, uint32_t channel
 /* The pixel value used as the window's background attribute, so that the
  * server never shows garbage between mapping and the first paint. cairo
  * paints the real colors afterwards, so a fallback to black is harmless. */
-static uint32_t pixel_from_rgb_color(const xcb_visualtype_t *visual_type, const xcb_screen_t *screen_of_window, rgb_color_t color)
+static uint32_t pixel_from_rgb_color(const xcb_visualtype_t *visual_type, const xcb_screen_t *screen_of_window, rgba_color_t color)
 {
 	if (visual_type->_class != XCB_VISUAL_CLASS_TRUE_COLOR && visual_type->_class != XCB_VISUAL_CLASS_DIRECT_COLOR)
 		return screen_of_window->black_pixel;
@@ -164,17 +243,22 @@ static void set_layout_text_safely(PangoLayout *layout, const char *text)
 	g_free(sanitized_text);
 }
 
-static void set_source_from_rgb_color(cairo_t *cairo_context, rgb_color_t color)
+static void set_source_from_rgba_color(cairo_t *cairo_context, rgba_color_t color)
 {
-	cairo_set_source_rgb(cairo_context, color.red / 255.0, color.green / 255.0, color.blue / 255.0);
+	cairo_set_source_rgba(cairo_context, color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0);
 }
 
 static cairo_status_t paint_banner(const indicator_resources_t *resources)
 {
 	cairo_t *cairo_context = resources->cairo_context;
-	set_source_from_rgb_color(cairo_context, resources->config.background_color);
+	/* SOURCE writes the background's alpha into the surface instead of
+	 * blending it over the previous frame; on an opaque surface cairo drops
+	 * the alpha, exactly as a server without a compositing manager does. */
+	set_source_from_rgba_color(cairo_context, resources->config.background_color);
+	cairo_set_operator(cairo_context, CAIRO_OPERATOR_SOURCE);
 	cairo_paint(cairo_context);
-	set_source_from_rgb_color(cairo_context, resources->config.foreground_color);
+	cairo_set_operator(cairo_context, CAIRO_OPERATOR_OVER);
+	set_source_from_rgba_color(cairo_context, resources->config.foreground_color);
 	cairo_move_to(cairo_context, INDICATOR_PADDING_IN_PIXELS, INDICATOR_PADDING_IN_PIXELS);
 	pango_cairo_show_layout(cairo_context, resources->layout);
 	cairo_surface_flush(resources->surface);
@@ -260,6 +344,13 @@ static void release_resources(indicator_resources_t *resources)
 	cairo_device_finish(resources->device);
 	cairo_device_destroy(resources->device);
 	xcb_destroy_window(resources->connection, resources->window);
+	switch (resources->visual.kind) {
+		case WINDOW_VISUAL_ARGB:
+			xcb_free_colormap(resources->connection, resources->visual.as.argb.colormap);
+			break;
+		case WINDOW_VISUAL_OPAQUE:
+			break;
+	}
 	xcb_flush(resources->connection);
 }
 
@@ -272,7 +363,7 @@ static void disable_after_error(cairo_status_t status)
 	indicator_singleton.kind = INDICATOR_DISABLED;
 }
 
-void indicator_init(const indicator_settings_t *settings, xcb_connection_t *connection, xcb_screen_t *screen_of_window)
+void indicator_init(const indicator_settings_t *settings, xcb_connection_t *connection, xcb_screen_t *screen_of_window, int screen_number)
 {
 	switch (settings->kind) {
 		case INDICATOR_SETTINGS_DISABLED:
@@ -283,23 +374,38 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	}
 	const indicator_config_t *config = &settings->as.enabled;
 
-	xcb_visualtype_t *visual_type = find_visual_type(screen_of_window, screen_of_window->root_visual);
-	if (visual_type == NULL)
-		err("Indicator: can't find the root visual.\n");
+	const window_visual_t visual = choose_window_visual(connection, screen_of_window);
+	if ((rgba_color_is_translucent(config->foreground_color) || rgba_color_is_translucent(config->background_color))
+			&& !compositing_manager_is_running(connection, screen_number))
+		warn("A translucent indicator color was given but no compositing manager is running: translucency needs one.\n");
 
 	const xcb_window_t window = xcb_generate_id(connection);
 	/* Values must follow the ascending bit order of their mask flags. An
 	 * exposure-only event mask and override-redirect make the window
-	 * invisible to the window manager and to keyboard focus. */
-	const uint32_t attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK;
-	const uint32_t attribute_values[] = {
-		pixel_from_rgb_color(visual_type, screen_of_window, config->background_color),
-		1,
-		1,
-		XCB_EVENT_MASK_EXPOSURE,
-	};
+	 * invisible to the window manager and to keyboard focus. A window on a
+	 * visual other than its parent's must state its border pixel and colormap. */
+	uint32_t attribute_mask = 0;
+	uint32_t attribute_values[6] = {0};
+	switch (visual.kind) {
+		case WINDOW_VISUAL_ARGB:
+			attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP;
+			attribute_values[0] = 0;   /* transparent black until the first paint */
+			attribute_values[1] = 0;
+			attribute_values[2] = 1;
+			attribute_values[3] = 1;
+			attribute_values[4] = XCB_EVENT_MASK_EXPOSURE;
+			attribute_values[5] = visual.as.argb.colormap;
+			break;
+		case WINDOW_VISUAL_OPAQUE:
+			attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK;
+			attribute_values[0] = pixel_from_rgb_color(visual.visual_type, screen_of_window, config->background_color);
+			attribute_values[1] = 1;
+			attribute_values[2] = 1;
+			attribute_values[3] = XCB_EVENT_MASK_EXPOSURE;
+			break;
+	}
 	/* 1x1 because the protocol rejects zero-sized windows; resized on each show. */
-	const xcb_void_cookie_t create_cookie = xcb_create_window_checked(connection, screen_of_window->root_depth, window, screen_of_window->root, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen_of_window->root_visual, attribute_mask, attribute_values);
+	const xcb_void_cookie_t create_cookie = xcb_create_window_checked(connection, visual.depth, window, screen_of_window->root, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, visual.visual_type->visual_id, attribute_mask, attribute_values);
 	xcb_generic_error_t *create_error = xcb_request_check(connection, create_cookie);
 	if (create_error != NULL) {
 		const uint8_t error_code = create_error->error_code;
@@ -314,7 +420,7 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	const uint32_t root_event_mask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
 	xcb_change_window_attributes(connection, screen_of_window->root, XCB_CW_EVENT_MASK, &root_event_mask);
 
-	cairo_surface_t *surface = cairo_xcb_surface_create(connection, window, visual_type, 1, 1);
+	cairo_surface_t *surface = cairo_xcb_surface_create(connection, window, visual.visual_type, 1, 1);
 	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
 		err("Indicator: can't create the cairo surface: %s.\n", cairo_status_to_string(cairo_surface_status(surface)));
 	cairo_device_t *device = cairo_device_reference(cairo_surface_get_device(surface));
@@ -342,6 +448,7 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	enabled->resources.connection = connection;
 	enabled->resources.root_window = screen_of_window->root;
 	enabled->resources.window = window;
+	enabled->resources.visual = visual;
 	enabled->resources.device = device;
 	enabled->resources.surface = surface;
 	enabled->resources.cairo_context = cairo_context;

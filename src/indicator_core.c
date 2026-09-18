@@ -52,10 +52,20 @@ bool indicator_parse_position(const char *position_text, indicator_position_t *p
 	return false;
 }
 
-bool indicator_parse_rgb_color(const char *color_text, rgb_color_t *parsed_color)
+bool indicator_parse_rgba_color(const char *color_text, rgba_color_t *parsed_color)
 {
-	const size_t hex_digit_count = 6;
-	if (strlen(color_text) != hex_digit_count + 1 || color_text[0] != '#')
+	size_t hex_digit_count;
+	switch (strlen(color_text)) {
+		case 7:
+			hex_digit_count = 6;
+			break;
+		case 9:
+			hex_digit_count = 8;
+			break;
+		default:
+			return false;
+	}
+	if (color_text[0] != '#')
 		return false;
 	for (size_t index = 1; index <= hex_digit_count; index++) {
 		if (!isxdigit((unsigned char) color_text[index]))
@@ -67,12 +77,25 @@ bool indicator_parse_rgb_color(const char *color_text, rgb_color_t *parsed_color
 	char *end_of_number = NULL;
 	errno = 0;
 	const unsigned long packed_color = strtoul(hex_digits, &end_of_number, 16);
-	if (errno != 0 || end_of_number != hex_digits + hex_digit_count || packed_color > 0xFFFFFFUL)
+	if (errno != 0 || end_of_number != hex_digits + hex_digit_count || packed_color > 0xFFFFFFFFUL)
 		return false;
-	parsed_color->red = (uint8_t) ((packed_color >> 16) & 0xFFUL);
-	parsed_color->green = (uint8_t) ((packed_color >> 8) & 0xFFUL);
-	parsed_color->blue = (uint8_t) (packed_color & 0xFFUL);
+	if (hex_digit_count == 6) {
+		parsed_color->red = (uint8_t) ((packed_color >> 16) & 0xFFUL);
+		parsed_color->green = (uint8_t) ((packed_color >> 8) & 0xFFUL);
+		parsed_color->blue = (uint8_t) (packed_color & 0xFFUL);
+		parsed_color->alpha = 0xFF;
+	} else {
+		parsed_color->red = (uint8_t) ((packed_color >> 24) & 0xFFUL);
+		parsed_color->green = (uint8_t) ((packed_color >> 16) & 0xFFUL);
+		parsed_color->blue = (uint8_t) ((packed_color >> 8) & 0xFFUL);
+		parsed_color->alpha = (uint8_t) (packed_color & 0xFFUL);
+	}
 	return true;
+}
+
+bool rgba_color_is_translucent(rgba_color_t color)
+{
+	return color.alpha != 0xFF;
 }
 
 /* A writer that never steps past the end of its buffer and always leaves it

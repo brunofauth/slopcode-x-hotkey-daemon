@@ -43,6 +43,7 @@
 
 xcb_connection_t *dpy;
 xcb_screen_t *screen;
+int screen_number;
 xcb_window_t root;
 xcb_key_symbols_t *symbols;
 
@@ -133,7 +134,7 @@ int main(int argc, char *argv[])
 	signal(SIGALRM, hold);
 
 	setup();
-	indicator_init(&options->indicator, dpy, screen);
+	indicator_init(&options->indicator, dpy, screen, screen_number);
 	get_standard_keysyms();
 	get_lock_fields();
 	abort_chord = make_chord(abort_keysym, XCB_NONE, 0, XCB_KEY_PRESS, false, false);
@@ -314,6 +315,7 @@ void setup(void)
 	dpy = xcb_connect(NULL, &screen_idx);
 	if (xcb_connection_has_error(dpy))
 		err("Can't open display.\n");
+	screen_number = screen_idx;
 	xcb_xkb_use_extension(dpy, XCB_XKB_MAJOR_VERSION, XCB_XKB_MINOR_VERSION);
 	xcb_xkb_per_client_flags(dpy, XCB_XKB_ID_USE_CORE_KBD, XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT, 1, 0, 0, 0);
 	screen = NULL;

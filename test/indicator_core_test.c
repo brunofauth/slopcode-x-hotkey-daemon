@@ -43,26 +43,38 @@ static void test_parse_position(void)
 
 static void test_parse_rgb_color(void)
 {
-	rgb_color_t color = {1, 2, 3};
-	CHECK(indicator_parse_rgb_color("#000000", &color) && color.red == 0 && color.green == 0 && color.blue == 0);
-	CHECK(indicator_parse_rgb_color("#FfFfFf", &color) && color.red == 255 && color.green == 255 && color.blue == 255);
-	CHECK(indicator_parse_rgb_color("#123abc", &color) && color.red == 0x12 && color.green == 0x3a && color.blue == 0xbc);
-	CHECK(indicator_parse_rgb_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &color));
-	CHECK(indicator_parse_rgb_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &color));
+	rgba_color_t color = {1, 2, 3, 4};
+	CHECK(indicator_parse_rgba_color("#000000", &color) && color.red == 0 && color.green == 0 && color.blue == 0);
+	CHECK(indicator_parse_rgba_color("#FfFfFf", &color) && color.red == 255 && color.green == 255 && color.blue == 255);
+	CHECK(indicator_parse_rgba_color("#123abc", &color) && color.red == 0x12 && color.green == 0x3a && color.blue == 0xbc);
+	CHECK(indicator_parse_rgba_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &color));
+	CHECK(indicator_parse_rgba_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &color));
+	CHECK(indicator_parse_rgba_color("#123456", &color) && color.alpha == 0xff);
+	CHECK(indicator_parse_rgba_color("#22222280", &color) && color.red == 0x22 && color.green == 0x22 && color.blue == 0x22 && color.alpha == 0x80);
+	CHECK(indicator_parse_rgba_color("#FFFFFFFF", &color) && color.alpha == 0xff);
+	CHECK(indicator_parse_rgba_color("#01020300", &color) && color.red == 1 && color.green == 2 && color.blue == 3 && color.alpha == 0);
+	CHECK(indicator_parse_rgba_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &color) && !rgba_color_is_translucent(color));
+	CHECK(indicator_parse_rgba_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &color) && !rgba_color_is_translucent(color));
+	CHECK(indicator_parse_rgba_color("#000000fe", &color) && rgba_color_is_translucent(color));
 
 	color.red = 7;
 	color.green = 8;
 	color.blue = 9;
-	CHECK(!indicator_parse_rgb_color("123456", &color));
-	CHECK(!indicator_parse_rgb_color("#12345", &color));
-	CHECK(!indicator_parse_rgb_color("#1234567", &color));
-	CHECK(!indicator_parse_rgb_color("#12345g", &color));
-	CHECK(!indicator_parse_rgb_color("#-12345", &color));
-	CHECK(!indicator_parse_rgb_color("# 12345", &color));
-	CHECK(!indicator_parse_rgb_color("#0x1234", &color));
-	CHECK(!indicator_parse_rgb_color("", &color));
-	CHECK(!indicator_parse_rgb_color("#", &color));
-	CHECK(color.red == 7 && color.green == 8 && color.blue == 9);   /* untouched on failure */
+	color.alpha = 10;
+	CHECK(!indicator_parse_rgba_color("123456", &color));
+	CHECK(!indicator_parse_rgba_color("#12345", &color));
+	CHECK(!indicator_parse_rgba_color("#1234567", &color));
+	CHECK(!indicator_parse_rgba_color("#12345g", &color));
+	CHECK(!indicator_parse_rgba_color("#-12345", &color));
+	CHECK(!indicator_parse_rgba_color("# 12345", &color));
+	CHECK(!indicator_parse_rgba_color("#0x1234", &color));
+	CHECK(!indicator_parse_rgba_color("", &color));
+	CHECK(!indicator_parse_rgba_color("#", &color));
+	CHECK(!indicator_parse_rgba_color("#123456789", &color));
+	CHECK(!indicator_parse_rgba_color("#1234567g", &color));
+	CHECK(!indicator_parse_rgba_color("#abc", &color));
+	CHECK(!indicator_parse_rgba_color("#abcd", &color));
+	CHECK(color.red == 7 && color.green == 8 && color.blue == 9 && color.alpha == 10);   /* untouched on failure */
 }
 
 static void test_derive_banner(void)

@@ -44,6 +44,7 @@
 
 extern xcb_connection_t *dpy;
 extern xcb_screen_t *screen;
+extern int screen_number;
 extern xcb_window_t root;
 extern xcb_key_symbols_t *symbols;
 

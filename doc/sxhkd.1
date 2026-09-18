@@ -111,6 +111,8 @@ Font of the chain indicator, as a Pango font description (default:
 .RS 4
 Foreground color of the chain indicator, as
 \fI#rrggbb\fR
+or
+\fI#rrggbbaa\fR
 (default:
 \fI#ffffff\fR)\&. Only meaningful with
 \fB\-i\fR\&.
@@ -120,6 +122,8 @@ Foreground color of the chain indicator, as
 .RS 4
 Background color of the chain indicator, as
 \fI#rrggbb\fR
+or
+\fI#rrggbbaa\fR
 (default:
 \fI#222222\fR)\&. Only meaningful with
 \fB\-i\fR\&.
@@ -136,7 +140,7 @@ If \fBsxhkd\fR receives a \fISIGUSR1\fR (resp\&. \fISIGUSR2\fR) signal, it will 
 .sp
 If \fBsxhkd\fR recieves a \fISIGALRM\fR signal, it will break the current chain if there is one in progress\&.
 .sp
-With the \fB\-i\fR option, \fBsxhkd\fR shows a small window while a chord chain is in progress\&. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below)\&. The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached\&. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size\&.
+With the \fB\-i\fR option, \fBsxhkd\fR shows a small window while a chord chain is in progress\&. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below)\&. The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached\&. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size\&. Translucent colors (an alpha below \fIff\fR) need a compositing manager; without one they render darker and fully transparent areas black, and \fBsxhkd\fR warns at startup\&.
 .sp
 The commands are executed via \fBSHELL\fR \fI\-c\fR \fBCOMMAND\fR (hence you can use environment variables)\&.
 .sp

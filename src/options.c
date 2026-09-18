@@ -95,9 +95,9 @@ static const option_spec_t option_specs[] = {
 	VALUED('f', "indicator-font", VALUED_INDICATOR_FONT, "FONT",
 		"Indicator font, a Pango description (default \"" INDICATOR_DEFAULT_FONT_DESCRIPTION "\")."),
 	VALUED('F', "indicator-foreground", VALUED_INDICATOR_FOREGROUND, "COLOR",
-		"Indicator text color, #rrggbb (default " INDICATOR_DEFAULT_FOREGROUND_COLOR ")."),
+		"Indicator text color, #rrggbb or #rrggbbaa (default " INDICATOR_DEFAULT_FOREGROUND_COLOR ")."),
 	VALUED('B', "indicator-background", VALUED_INDICATOR_BACKGROUND, "COLOR",
-		"Indicator background color, #rrggbb (default " INDICATOR_DEFAULT_BACKGROUND_COLOR ")."),
+		"Indicator background color, #rrggbb or #rrggbbaa (default " INDICATOR_DEFAULT_BACKGROUND_COLOR ")."),
 };
 
 /* Parser state beyond the result: the indicator configuration is assembled
@@ -219,15 +219,15 @@ static void apply_valued(parser_state_t *state, valued_option_t option, const ch
 			state->indicator_look_given = true;
 			return;
 		case VALUED_INDICATOR_FOREGROUND:
-			if (!indicator_parse_rgb_color(value, &state->indicator_config.foreground_color)) {
-				set_invalid(result, "invalid value '%s' for %s: expected a color as #rrggbb", value, option_as_written);
+			if (!indicator_parse_rgba_color(value, &state->indicator_config.foreground_color)) {
+				set_invalid(result, "invalid value '%s' for %s: expected a color as #rrggbb or #rrggbbaa", value, option_as_written);
 				return;
 			}
 			state->indicator_look_given = true;
 			return;
 		case VALUED_INDICATOR_BACKGROUND:
-			if (!indicator_parse_rgb_color(value, &state->indicator_config.background_color)) {
-				set_invalid(result, "invalid value '%s' for %s: expected a color as #rrggbb", value, option_as_written);
+			if (!indicator_parse_rgba_color(value, &state->indicator_config.background_color)) {
+				set_invalid(result, "invalid value '%s' for %s: expected a color as #rrggbb or #rrggbbaa", value, option_as_written);
 				return;
 			}
 			state->indicator_look_given = true;
@@ -254,8 +254,8 @@ static void initialize_parser_state(parser_state_t *state)
 	state->indicator_config.font_description_text = INDICATOR_DEFAULT_FONT_DESCRIPTION;
 	/* The built-in colors are constants verified by the unit test; a failure
 	 * here would be a programming error, not user input. */
-	if (!indicator_parse_rgb_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &state->indicator_config.foreground_color)
-			|| !indicator_parse_rgb_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &state->indicator_config.background_color))
+	if (!indicator_parse_rgba_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &state->indicator_config.foreground_color)
+			|| !indicator_parse_rgba_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &state->indicator_config.background_color))
 		set_invalid(&state->result, "the built-in indicator colors are invalid");
 	state->indicator_position_given = false;
 	state->indicator_look_given = false;

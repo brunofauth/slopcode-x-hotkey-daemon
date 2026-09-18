@@ -126,6 +126,11 @@ static void test_indicator(void)
 	CHECK(config->foreground_color.red == 1 && config->foreground_color.green == 2 && config->foreground_color.blue == 3);
 	CHECK(config->background_color.red == 0xa0 && config->background_color.green == 0xb0 && config->background_color.blue == 0xc0);
 	CHECK(!command_line.as.run.indicator_look_given_without_position);
+	CHECK(config->foreground_color.alpha == 0xff && config->background_color.alpha == 0xff);
+
+	command_line = PARSE("-i", "top", "--indicator-background=#22222280");
+	CHECK(command_line.kind == COMMAND_LINE_RUN && command_line.as.run.indicator.as.enabled.background_color.alpha == 0x80);
+	CHECK(message_contains(PARSE("-B", "#abc"), "#rrggbb or #rrggbbaa"));
 
 	command_line = PARSE("-i", "top");
 	CHECK(command_line.as.run.indicator.kind == INDICATOR_SETTINGS_ENABLED);

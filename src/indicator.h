@@ -38,7 +38,7 @@
 /* Creates the window and rendering resources (or nothing, if disabled).
  * Exits the process through err() if the user asked for an indicator that
  * cannot be set up. Must run before the first call of any other entry point. */
-void indicator_init(const indicator_settings_t *settings, xcb_connection_t *connection, xcb_screen_t *screen_of_window);
+void indicator_init(const indicator_settings_t *settings, xcb_connection_t *connection, xcb_screen_t *screen_of_window, int screen_number);
 
 /* Makes what is on screen match the given recorder state: shows, updates or
  * hides the banner as needed. Idempotent and cheap when nothing changed, so it

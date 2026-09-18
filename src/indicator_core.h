@@ -65,14 +65,15 @@ typedef struct {
 	uint8_t red;
 	uint8_t green;
 	uint8_t blue;
-} rgb_color_t;
+	uint8_t alpha;   /* 0xff: opaque */
+} rgba_color_t;
 
 typedef struct {
 	indicator_position_t position;
 	/* Points into argv[] or at a string literal: valid for the process lifetime. */
 	const char *font_description_text;
-	rgb_color_t foreground_color;
-	rgb_color_t background_color;
+	rgba_color_t foreground_color;
+	rgba_color_t background_color;
 } indicator_config_t;
 
 typedef enum {
@@ -118,7 +119,9 @@ extern const indicator_position_name_t indicator_position_names[];
 extern const size_t indicator_position_name_count;
 
 bool indicator_parse_position(const char *position_text, indicator_position_t *parsed_position);
-bool indicator_parse_rgb_color(const char *color_text, rgb_color_t *parsed_color);
+/* Accepts "#rrggbb" (opaque) and "#rrggbbaa"; never writes on failure. */
+bool indicator_parse_rgba_color(const char *color_text, rgba_color_t *parsed_color);
+bool rgba_color_is_translucent(rgba_color_t color);
 void indicator_derive_banner(chain_phase_t chain_phase, const char *progress_text, indicator_banner_t *banner);
 uint16_t indicator_pixel_extent_from_int(int32_t extent);
 pixel_origin_t indicator_compute_window_origin(indicator_position_t position, pixel_size_t screen_size, pixel_size_t window_size, uint16_t margin_in_pixels);

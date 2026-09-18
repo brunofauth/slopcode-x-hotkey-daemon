@@ -27,6 +27,7 @@ always know which mode you are in:
 	sxhkd --indicator top-right --indicator-font "monospace 14" -F '#ffffff' -B '#222222'
 
 Every option has a short and a long form; `sxhkd --help` lists them all.
+Colors take an optional alpha (`-B '#222222c0'`); translucency needs a compositing manager.
 
 
 ## Status FIFO

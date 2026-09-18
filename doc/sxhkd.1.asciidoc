@@ -56,10 +56,10 @@ Every option has a short and a long form. Long options take their value as *--na
     Font of the chain indicator, as a Pango font description (default: _monospace 14_). Only meaningful with *-i*.
 
 *-F*, *--indicator-foreground* _COLOR_::
-    Foreground color of the chain indicator, as _#rrggbb_ (default: _#ffffff_). Only meaningful with *-i*.
+    Foreground color of the chain indicator, as _#rrggbb_ or _#rrggbbaa_ (default: _#ffffff_). Only meaningful with *-i*.
 
 *-B*, *--indicator-background* _COLOR_::
-    Background color of the chain indicator, as _#rrggbb_ (default: _#222222_). Only meaningful with *-i*.
+    Background color of the chain indicator, as _#rrggbb_ or _#rrggbbaa_ (default: _#222222_). Only meaningful with *-i*.
 
 
 Behavior
@@ -75,7 +75,7 @@ If *sxhkd* receives a _SIGUSR1_ (resp. _SIGUSR2_) signal, it will reload its con
 
 If *sxhkd* recieves a _SIGALRM_ signal, it will break the current chain if there is one in progress.
 
-With the *-i* option, *sxhkd* shows a small window while a chord chain is in progress. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below). The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size.
+With the *-i* option, *sxhkd* shows a small window while a chord chain is in progress. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below). The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size. Translucent colors (an alpha below _ff_) need a compositing manager; without one they render darker and fully transparent areas black, and *sxhkd* warns at startup.
 
 The commands are executed via *SHELL* _-c_ *COMMAND* (hence you can use environment variables).
 
