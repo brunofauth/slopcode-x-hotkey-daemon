@@ -107,6 +107,16 @@ typedef struct {
 	int16_t y;
 } pixel_origin_t;
 
+typedef struct {
+	const char *name;
+	indicator_position_t position;
+} indicator_position_name_t;
+
+/* Every accepted position name, in display order: the single source for the
+ * parser, the help text and the diagnostics. */
+extern const indicator_position_name_t indicator_position_names[];
+extern const size_t indicator_position_name_count;
+
 bool indicator_parse_position(const char *position_text, indicator_position_t *parsed_position);
 bool indicator_parse_rgb_color(const char *color_text, rgb_color_t *parsed_color);
 void indicator_derive_banner(chain_phase_t chain_phase, const char *progress_text, indicator_banner_t *banner);

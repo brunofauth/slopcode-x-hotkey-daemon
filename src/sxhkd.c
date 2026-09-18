@@ -39,6 +39,7 @@
 #include "parse.h"
 #include "grab.h"
 #include "indicator.h"
+#include "options.h"
 
 xcb_connection_t *dpy;
 xcb_screen_t *screen;
@@ -47,7 +48,6 @@ xcb_key_symbols_t *symbols;
 
 char *shell;
 char config_file[MAXLEN];
-char *config_path;
 char **extra_confs;
 int num_extra_confs;
 int redir_fd;
@@ -72,107 +72,58 @@ uint16_t scroll_lock;
 
 int main(int argc, char *argv[])
 {
-	int opt;
-	char *fifo_path = NULL;
 	status_fifo.kind = STATUS_FIFO_ABSENT;
-	config_path = NULL;
-	mapping_count = 0;
-	timeout = TIMEOUT;
 	grabbed = false;
 	redir_fd = -1;
 	abort_keysym = ESCAPE_KEYSYM;
 
-	indicator_config_t indicator_config;
-	indicator_config.position = INDICATOR_POSITION_TOP_RIGHT;
-	indicator_config.font_description_text = INDICATOR_DEFAULT_FONT_DESCRIPTION;
-	if (!indicator_parse_rgb_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &indicator_config.foreground_color)
-			|| !indicator_parse_rgb_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &indicator_config.background_color))
-		err("The built-in indicator colors are invalid.\n");
-	bool indicator_position_given = false;
-	bool indicator_look_given = false;
+	const command_line_t command_line = parse_command_line(argc, argv);
+	switch (command_line.kind) {
+		case COMMAND_LINE_SHOW_HELP:
+			print_usage(stdout);
+			return EXIT_SUCCESS;
+		case COMMAND_LINE_SHOW_VERSION:
+			printf("%s\n", VERSION);
+			return EXIT_SUCCESS;
+		case COMMAND_LINE_INVALID:
+			err("%s\nTry 'sxhkd --help' for more information.\n", command_line.as.invalid.message);
+		case COMMAND_LINE_RUN:
+			break;
+	}
+	const run_options_t *options = &command_line.as.run;
 
-	while ((opt = getopt(argc, argv, "hvm:t:c:r:s:a:i:f:F:B:")) != -1) {
-		switch (opt) {
-			case 'v':
-				printf("%s\n", VERSION);
-				exit(EXIT_SUCCESS);
-				break;
-			case 'h':
-				printf("sxhkd [-h|-v|-m COUNT|-t TIMEOUT|-c CONFIG_FILE|-r REDIR_FILE|-s STATUS_FIFO|-a ABORT_KEYSYM|-i POSITION|-f FONT|-F COLOR|-B COLOR] [EXTRA_CONFIG ...]\n");
-				exit(EXIT_SUCCESS);
-				break;
-			case 'm':
-				if (sscanf(optarg, "%i", &mapping_count) != 1)
-					warn("Can't parse mapping count.\n");
-				break;
-			case 't':
-				timeout = atoi(optarg);
-				break;
-			case 'c':
-				config_path = optarg;
-				break;
-			case 'r':
-				redir_fd = open(optarg, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-				if (redir_fd == -1)
-					warn("Failed to open the command redirection file.\n");
-				break;
-			case 's':
-				fifo_path = optarg;
-				break;
-			case 'a':
-				if (!parse_keysym(optarg, &abort_keysym)) {
-					warn("Invalid keysym name: %s.\n", optarg);
-				}
-				break;
-			case 'i':
-				if (!indicator_parse_position(optarg, &indicator_config.position))
-					err("Invalid indicator position: '%s' (expected top, top-left, top-right, center, center-left, center-right, bottom, bottom-left or bottom-right).\n", optarg);
-				indicator_position_given = true;
-				break;
-			case 'f':
-				if (optarg[0] == '\0')
-					err("The indicator font description is empty.\n");
-				indicator_config.font_description_text = optarg;
-				indicator_look_given = true;
-				break;
-			case 'F':
-				if (!indicator_parse_rgb_color(optarg, &indicator_config.foreground_color))
-					err("Invalid indicator foreground color: '%s' (expected #rrggbb).\n", optarg);
-				indicator_look_given = true;
-				break;
-			case 'B':
-				if (!indicator_parse_rgb_color(optarg, &indicator_config.background_color))
-					err("Invalid indicator background color: '%s' (expected #rrggbb).\n", optarg);
-				indicator_look_given = true;
-				break;
-		}
+	mapping_count = options->mapping_count;
+	timeout = options->timeout_in_seconds;
+	num_extra_confs = options->extra_config_count;
+	extra_confs = options->extra_config_paths;
+
+	if (options->redirect_path != NULL) {
+		redir_fd = open(options->redirect_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		if (redir_fd == -1)
+			err("Can't open the command redirection file '%s': %s.\n", options->redirect_path, strerror(errno));
 	}
 
-	if (indicator_look_given && !indicator_position_given)
-		warn("The -f, -F and -B options have no effect without -i.\n");
-	indicator_settings_t indicator_settings;
-	if (indicator_position_given) {
-		indicator_settings.kind = INDICATOR_SETTINGS_ENABLED;
-		indicator_settings.as.enabled = indicator_config;
-	} else {
-		indicator_settings.kind = INDICATOR_SETTINGS_DISABLED;
+	if (options->abort_keysym_name != NULL) {
+		/* parse_keysym only reads its argument; its signature predates const. */
+		if (!parse_keysym((char *) options->abort_keysym_name, &abort_keysym))
+			err("Invalid keysym name: '%s'.\n", options->abort_keysym_name);
 	}
 
-	num_extra_confs = argc - optind;
-	extra_confs = argv + optind;
+	if (options->indicator_look_given_without_position)
+		warn("The indicator font and colors have no effect without --indicator.\n");
 
-	if (config_path == NULL) {
+	if (options->config_path == NULL) {
 		char *config_home = getenv(CONFIG_HOME_ENV);
 		if (config_home != NULL)
 			snprintf(config_file, sizeof(config_file), "%s/%s", config_home, CONFIG_PATH);
 		else
 			snprintf(config_file, sizeof(config_file), "%s/%s/%s", getenv("HOME"), ".config", CONFIG_PATH);
 	} else {
-		snprintf(config_file, sizeof(config_file), "%s", config_path);
+		snprintf(config_file, sizeof(config_file), "%s", options->config_path);
 	}
 
-	if (fifo_path != NULL)
-		status_fifo = open_status_fifo(fifo_path);
+	if (options->status_fifo_path != NULL)
+		status_fifo = open_status_fifo(options->status_fifo_path);
 
 	signal(SIGINT, hold);
 	signal(SIGHUP, hold);
@@ -182,7 +133,7 @@ int main(int argc, char *argv[])
 	signal(SIGALRM, hold);
 
 	setup();
-	indicator_init(&indicator_settings, dpy, screen);
+	indicator_init(&options->indicator, dpy, screen);
 	get_standard_keysyms();
 	get_lock_fields();
 	abort_chord = make_chord(abort_keysym, XCB_NONE, 0, XCB_KEY_PRESS, false, false);

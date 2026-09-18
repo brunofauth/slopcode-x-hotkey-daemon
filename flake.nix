@@ -32,7 +32,7 @@
         # which it does inside the sandbox; make that explicit.
         makeFlags = [ "PREFIX=${placeholder "out"}" "VERCMD=false" ];
 
-        # Runs the headless unit test of the indicator core. UBSan only: the
+        # Runs the headless unit tests (indicator core, options). UBSan only: the
         # sanitizer runtimes of ASan and glibc's fortified functions, which the
         # Nix compiler wrapper enables, do not cooperate. The dev shell below
         # disables fortification so that `make check` there runs ASan as well.

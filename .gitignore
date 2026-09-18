@@ -3,3 +3,4 @@ sxhkd
 tags
 test/indicator_core_test
 result
+test/options_test

@@ -41,7 +41,6 @@
 #define BEGIN_CHAIN_PREFIX  'B'
 #define END_CHAIN_PREFIX    'E'
 #define TIMEOUT_PREFIX      'T'
-#define TIMEOUT              3
 
 extern xcb_connection_t *dpy;
 extern xcb_screen_t *screen;
@@ -50,7 +49,6 @@ extern xcb_key_symbols_t *symbols;
 
 extern char *shell;
 extern char config_file[MAXLEN];
-extern char *config_path;
 extern char **extra_confs;
 extern int num_extra_confs;
 extern int redir_fd;

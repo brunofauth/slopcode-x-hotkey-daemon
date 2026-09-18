@@ -36,52 +36,54 @@ sxhkd \- Simple X hotkey daemon
 .sp
 sxhkd is a simple X hotkey daemon with a powerful and compact configuration syntax\&.
 .SH "OPTIONS"
+.sp
+Every option has a short and a long form\&. Long options take their value as \fB\-\-name\fR=\fIVALUE\fR or \fB\-\-name\fR \fIVALUE\fR; \fB\-\-\fR ends the options, and any other argument is an extra configuration file\&.
 .PP
-\fB\-h\fR
+\fB\-h\fR, \fB\-\-help\fR
 .RS 4
-Print the synopsis to standard output and exit\&.
+Print the help to standard output and exit\&.
 .RE
 .PP
-\fB\-v\fR
+\fB\-v\fR, \fB\-\-version\fR
 .RS 4
 Print the version information to standard output and exit\&.
 .RE
 .PP
-\fB\-m\fR \fICOUNT\fR
+\fB\-m\fR, \fB\-\-mapping\-count\fR \fICOUNT\fR
 .RS 4
 Handle the first
 \fICOUNT\fR
 mapping notify events\&.
 .RE
 .PP
-\fB\-t\fR \fITIMEOUT\fR
+\fB\-t\fR, \fB\-\-timeout\fR \fISECONDS\fR
 .RS 4
 Timeout in seconds for the recording of chord chains\&.
 .RE
 .PP
-\fB\-c\fR \fICONFIG_FILE\fR
+\fB\-c\fR, \fB\-\-config\fR \fIFILE\fR
 .RS 4
 Read the main configuration from the given file\&.
 .RE
 .PP
-\fB\-r\fR \fIREDIR_FILE\fR
+\fB\-r\fR, \fB\-\-redirect\fR \fIFILE\fR
 .RS 4
 Redirect the commands output to the given file\&.
 .RE
 .PP
-\fB\-s\fR \fISTATUS_FIFO\fR
+\fB\-s\fR, \fB\-\-status\-fifo\fR \fIPATH\fR
 .RS 4
 Output status information to the given FIFO (see the
 \fIStatus FIFO\fR
 section)\&. The FIFO is created if it does not exist\&.
 .RE
 .PP
-\fB\-a\fR \fIABORT_KEYSYM\fR
+\fB\-a\fR, \fB\-\-abort\-keysym\fR \fIKEYSYM\fR
 .RS 4
 Name of the keysym used for aborting chord chains\&.
 .RE
 .PP
-\fB\-i\fR \fIPOSITION\fR
+\fB\-i\fR, \fB\-\-indicator\fR \fIPOSITION\fR
 .RS 4
 Show an on\-screen indicator while a chord chain is in progress, anchored at the given
 \fIPOSITION\fR
@@ -98,14 +100,14 @@ or
 \fIbottom\-right\fR\&.
 .RE
 .PP
-\fB\-f\fR \fIFONT\fR
+\fB\-f\fR, \fB\-\-indicator\-font\fR \fIFONT\fR
 .RS 4
 Font of the chain indicator, as a Pango font description (default:
 \fImonospace 14\fR)\&. Only meaningful with
 \fB\-i\fR\&.
 .RE
 .PP
-\fB\-F\fR \fICOLOR\fR
+\fB\-F\fR, \fB\-\-indicator\-foreground\fR \fICOLOR\fR
 .RS 4
 Foreground color of the chain indicator, as
 \fI#rrggbb\fR
@@ -114,7 +116,7 @@ Foreground color of the chain indicator, as
 \fB\-i\fR\&.
 .RE
 .PP
-\fB\-B\fR \fICOLOR\fR
+\fB\-B\fR, \fB\-\-indicator\-background\fR \fICOLOR\fR
 .RS 4
 Background color of the chain indicator, as
 \fI#rrggbb\fR

@@ -23,41 +23,42 @@ sxhkd is a simple X hotkey daemon with a powerful and compact configuration synt
 Options
 -------
 
+Every option has a short and a long form. Long options take their value as *--name*=_VALUE_ or *--name* _VALUE_; *--* ends the options, and any other argument is an extra configuration file.
 
-*-h*::
-    Print the synopsis to standard output and exit.
+*-h*, *--help*::
+    Print the help to standard output and exit.
 
-*-v*::
+*-v*, *--version*::
     Print the version information to standard output and exit.
 
-*-m* _COUNT_::
+*-m*, *--mapping-count* _COUNT_::
     Handle the first _COUNT_ mapping notify events.
 
-*-t* _TIMEOUT_::
+*-t*, *--timeout* _SECONDS_::
     Timeout in seconds for the recording of chord chains.
 
-*-c* _CONFIG_FILE_::
+*-c*, *--config* _FILE_::
     Read the main configuration from the given file.
 
-*-r* _REDIR_FILE_::
+*-r*, *--redirect* _FILE_::
     Redirect the commands output to the given file.
 
-*-s* _STATUS_FIFO_::
+*-s*, *--status-fifo* _PATH_::
     Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO is created if it does not exist.
 
-*-a* _ABORT_KEYSYM_::
+*-a*, *--abort-keysym* _KEYSYM_::
     Name of the keysym used for aborting chord chains.
 
-*-i* _POSITION_::
+*-i*, *--indicator* _POSITION_::
     Show an on-screen indicator while a chord chain is in progress, anchored at the given _POSITION_ of the screen: _top_, _top-left_, _top-right_, _center_, _center-left_, _center-right_, _bottom_, _bottom-left_ or _bottom-right_.
 
-*-f* _FONT_::
+*-f*, *--indicator-font* _FONT_::
     Font of the chain indicator, as a Pango font description (default: _monospace 14_). Only meaningful with *-i*.
 
-*-F* _COLOR_::
+*-F*, *--indicator-foreground* _COLOR_::
     Foreground color of the chain indicator, as _#rrggbb_ (default: _#ffffff_). Only meaningful with *-i*.
 
-*-B* _COLOR_::
+*-B*, *--indicator-background* _COLOR_::
     Background color of the chain indicator, as _#rrggbb_ (default: _#222222_). Only meaningful with *-i*.
 
 

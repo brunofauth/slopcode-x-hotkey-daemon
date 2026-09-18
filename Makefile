@@ -44,7 +44,7 @@ $(OBJ): Makefile | check-indicator-deps
 
 $(OUT): $(OBJ)
 
-indicator_core.o indicator.o: CFLAGS += $(STRICT_CFLAGS)
+indicator_core.o indicator.o options.o: CFLAGS += $(STRICT_CFLAGS)
 
 check-indicator-deps:
 	@$(PKG_CONFIG) --exists $(INDICATOR_PKGS) || { \
@@ -52,7 +52,7 @@ check-indicator-deps:
 		exit 1; \
 	}
 
-ANALYZE_SRC = src/indicator_core.c src/indicator.c
+ANALYZE_SRC = src/indicator_core.c src/indicator.c src/options.c
 
 analyze:
 	for source in $(ANALYZE_SRC); do \
@@ -65,13 +65,17 @@ analyze:
 		clang-tidy $(ANALYZE_SRC) -- $(CPPFLAGS) -std=c99 -Isrc; \
 	else echo "clang-tidy not installed, skipped"; fi
 
-TEST_BIN = test/indicator_core_test
+TEST_BINS = test/indicator_core_test test/options_test
 
-check: $(TEST_BIN)
-	./$(TEST_BIN)
+check: $(TEST_BINS)
+	./test/indicator_core_test
+	./test/options_test
 
-$(TEST_BIN): test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
+test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) -Werror $(TEST_CFLAGS) -Isrc -o $@ test/indicator_core_test.c src/indicator_core.c
+
+test/options_test: test/options_test.c src/options.c src/options.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
+	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) -Werror $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/indicator_core.c
 
 install:
 	mkdir -p "$(DESTDIR)$(BINPREFIX)"
@@ -90,6 +94,6 @@ doc:
 	a2x -v -d manpage -f manpage -a revnumber=$(VERSION) doc/$(OUT).1.asciidoc
 
 clean:
-	rm -f $(OBJ) $(OUT) $(TEST_BIN)
+	rm -f $(OBJ) $(OUT) $(TEST_BINS)
 
 .PHONY: all debug install uninstall doc clean check check-indicator-deps analyze

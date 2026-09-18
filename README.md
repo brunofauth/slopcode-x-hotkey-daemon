@@ -24,7 +24,9 @@ like modes. With the `-i` option, *sxhkd* shows a small on-screen indicator
 listing the chords received so far while a chain is in progress, so that you
 always know which mode you are in:
 
-	sxhkd -i top-right -f "monospace 14" -F '#ffffff' -B '#222222'
+	sxhkd --indicator top-right --indicator-font "monospace 14" -F '#ffffff' -B '#222222'
+
+Every option has a short and a long form; `sxhkd --help` lists them all.
 
 
 ## Status FIFO

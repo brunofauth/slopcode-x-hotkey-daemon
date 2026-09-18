@@ -28,25 +28,24 @@
 #include <string.h>
 #include "indicator_core.h"
 
+const indicator_position_name_t indicator_position_names[] = {
+	{"top", INDICATOR_POSITION_TOP},
+	{"top-left", INDICATOR_POSITION_TOP_LEFT},
+	{"top-right", INDICATOR_POSITION_TOP_RIGHT},
+	{"center", INDICATOR_POSITION_CENTER},
+	{"center-left", INDICATOR_POSITION_CENTER_LEFT},
+	{"center-right", INDICATOR_POSITION_CENTER_RIGHT},
+	{"bottom", INDICATOR_POSITION_BOTTOM},
+	{"bottom-left", INDICATOR_POSITION_BOTTOM_LEFT},
+	{"bottom-right", INDICATOR_POSITION_BOTTOM_RIGHT},
+};
+const size_t indicator_position_name_count = LENGTH(indicator_position_names);
+
 bool indicator_parse_position(const char *position_text, indicator_position_t *parsed_position)
 {
-	static const struct {
-		const char *name;
-		indicator_position_t position;
-	} known_positions[] = {
-		{"top", INDICATOR_POSITION_TOP},
-		{"top-left", INDICATOR_POSITION_TOP_LEFT},
-		{"top-right", INDICATOR_POSITION_TOP_RIGHT},
-		{"bottom", INDICATOR_POSITION_BOTTOM},
-		{"bottom-left", INDICATOR_POSITION_BOTTOM_LEFT},
-		{"bottom-right", INDICATOR_POSITION_BOTTOM_RIGHT},
-		{"center", INDICATOR_POSITION_CENTER},
-		{"center-left", INDICATOR_POSITION_CENTER_LEFT},
-		{"center-right", INDICATOR_POSITION_CENTER_RIGHT},
-	};
-	for (size_t index = 0; index < LENGTH(known_positions); index++) {
-		if (strcmp(position_text, known_positions[index].name) == 0) {
-			*parsed_position = known_positions[index].position;
+	for (size_t index = 0; index < indicator_position_name_count; index++) {
+		if (strcmp(position_text, indicator_position_names[index].name) == 0) {
+			*parsed_position = indicator_position_names[index].position;
 			return true;
 		}
 	}

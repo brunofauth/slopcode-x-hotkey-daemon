@@ -6,9 +6,11 @@ indicator.o: indicator.c chain_phase.h helpers.h indicator.h indicator_core.h
 OBJ += indicator.o
 indicator_core.o: indicator_core.c chain_phase.h helpers.h indicator_core.h
 OBJ += indicator_core.o
+options.o: options.c chain_phase.h helpers.h indicator_core.h options.h
+OBJ += options.o
 parse.o: parse.c chain_phase.h helpers.h locales.h parse.h sxhkd.h types.h
 OBJ += parse.o
-sxhkd.o: sxhkd.c chain_phase.h grab.h helpers.h indicator.h indicator_core.h parse.h sxhkd.h types.h
+sxhkd.o: sxhkd.c chain_phase.h grab.h helpers.h indicator.h indicator_core.h options.h parse.h sxhkd.h types.h
 OBJ += sxhkd.o
 types.o: types.c chain_phase.h grab.h helpers.h parse.h sxhkd.h types.h
 OBJ += types.o
