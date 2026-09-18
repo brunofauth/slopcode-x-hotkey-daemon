@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 {
   description = "sxhkd - Simple X hotkey daemon, with an on-screen chord-chain indicator";
 
@@ -43,7 +44,7 @@
         meta = with pkgs.lib; {
           description = "Simple X hotkey daemon";
           homepage = "https://github.com/baskerville/sxhkd";
-          license = licenses.bsd2;
+          license = with licenses; [ gpl3Plus bsd2 ];
           platforms = supportedSystems;
           mainProgram = "sxhkd";
         };

@@ -22,6 +22,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Modifications Copyright (c) 2026 Bruno Fauth
+ *
+ * This file is part of a fork of sxhkd distributed as a whole under the GNU
+ * General Public License, version 3 or (at your option) any later version;
+ * see LICENSE. The original code remains available under the BSD 2-Clause
+ * license reproduced above and in LICENSE.BSD-2-Clause.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

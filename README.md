@@ -160,6 +160,10 @@ analysis, and `nix develop` opens a shell with every build and test tool.
 - [sxhkd-mode](https://github.com/xFA25E/sxhkd-mode)
 - [sxhkdrc-mode](https://github.com/protesilaos/sxhkdrc-mode)
 
+## License
+
+This fork is distributed under the GNU General Public License, version 3 or (at your option) any later version; see `LICENSE`. The original sxhkd code by Bastien Dejean is licensed under the BSD 2-Clause license, reproduced in `LICENSE.BSD-2-Clause` and in the headers of his files.
+
 ----
 
 For further information, check the `man` pages.

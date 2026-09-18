@@ -1,11 +1,12 @@
 # Maintainer: Bruno Fauth <brunovfauth@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=sxhkd-git
 pkgver=0.7.0.r1.g4ce667b
 pkgrel=1
 pkgdesc='Simple X hotkey daemon, with an on-screen chord-chain indicator'
 arch=('x86_64' 'aarch64')
 url='https://github.com/brunofauth/slopcode-x-hotkey-daemon'
-license=('BSD-2-Clause')
+license=('GPL-3.0-or-later' 'BSD-2-Clause')
 depends=('libxcb' 'xcb-util' 'xcb-util-keysyms' 'cairo' 'pango')
 makedepends=('git' 'pkgconf')
 provides=('sxhkd')
@@ -35,5 +36,5 @@ check() {
 package() {
 	cd sxhkd
 	make PREFIX=/usr DESTDIR="$pkgdir" install
-	install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+	install -Dm644 LICENSE LICENSE.BSD-2-Clause -t "$pkgdir/usr/share/licenses/$pkgname"
 }
