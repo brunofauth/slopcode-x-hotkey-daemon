@@ -226,7 +226,7 @@ pixel_origin_t indicator_compute_window_origin(indicator_position_t position, pi
 			x = left_aligned_x;
 			y = centered_y;
 			break;
-		case INDICATOR_POSITION_CENTER:
+		case INDICATOR_POSITION_CENTER_RIGHT:
 			x = right_aligned_x;
 			y = centered_y;
 			break;

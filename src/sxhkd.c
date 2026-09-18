@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
 				break;
 			case 'i':
 				if (!indicator_parse_position(optarg, &indicator_config.position))
-					err("Invalid indicator position: '%s' (expected top-left, top-right, bottom-left, bottom-right or center).\n", optarg);
+					err("Invalid indicator position: '%s' (expected top, top-left, top-right, center, center-left, center-right, bottom, bottom-left or bottom-right).\n", optarg);
 				indicator_position_given = true;
 				break;
 			case 'f':

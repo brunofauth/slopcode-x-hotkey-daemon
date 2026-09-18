@@ -146,12 +146,22 @@ static void test_compute_window_origin(void)
 	CHECK(origin.x == 1280 - 200 - 16 && origin.y == 720 - 40 - 16);
 	origin = indicator_compute_window_origin(INDICATOR_POSITION_CENTER, screen_size, window_size, margin);
 	CHECK(origin.x == (1280 - 200) / 2 && origin.y == (720 - 40) / 2);
+	origin = indicator_compute_window_origin(INDICATOR_POSITION_TOP, screen_size, window_size, margin);
+	CHECK(origin.x == (1280 - 200) / 2 && origin.y == 16);
+	origin = indicator_compute_window_origin(INDICATOR_POSITION_BOTTOM, screen_size, window_size, margin);
+	CHECK(origin.x == (1280 - 200) / 2 && origin.y == 720 - 40 - 16);
+	origin = indicator_compute_window_origin(INDICATOR_POSITION_CENTER_LEFT, screen_size, window_size, margin);
+	CHECK(origin.x == 16 && origin.y == (720 - 40) / 2);
+	origin = indicator_compute_window_origin(INDICATOR_POSITION_CENTER_RIGHT, screen_size, window_size, margin);
+	CHECK(origin.x == 1280 - 200 - 16 && origin.y == (720 - 40) / 2);
 
 	/* A window wider and taller than the screen is pinned to the origin. */
 	const pixel_size_t oversized_window = {2000, 1000};
 	origin = indicator_compute_window_origin(INDICATOR_POSITION_BOTTOM_RIGHT, screen_size, oversized_window, margin);
 	CHECK(origin.x == 0 && origin.y == 0);
 	origin = indicator_compute_window_origin(INDICATOR_POSITION_CENTER, screen_size, oversized_window, margin);
+	CHECK(origin.x == 0 && origin.y == 0);
+	origin = indicator_compute_window_origin(INDICATOR_POSITION_CENTER_RIGHT, screen_size, oversized_window, margin);
 	CHECK(origin.x == 0 && origin.y == 0);
 
 	/* Coordinates beyond the X protocol's int16 range are clamped, never wrapped. */

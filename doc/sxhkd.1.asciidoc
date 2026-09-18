@@ -49,7 +49,7 @@ Options
     Name of the keysym used for aborting chord chains.
 
 *-i* _POSITION_::
-    Show an on-screen indicator while a chord chain is in progress, anchored at the given _POSITION_ of the screen: _top-left_, _top-right_, _bottom-left_, _bottom-right_ or _center_.
+    Show an on-screen indicator while a chord chain is in progress, anchored at the given _POSITION_ of the screen: _top_, _top-left_, _top-right_, _center_, _center-left_, _center-right_, _bottom_, _bottom-left_ or _bottom-right_.
 
 *-f* _FONT_::
     Font of the chain indicator, as a Pango font description (default: _monospace 14_). Only meaningful with *-i*.
