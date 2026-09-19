@@ -102,16 +102,86 @@ static bool abort_chord_matches(uint8_t event_type, xcb_keysym_t keysym, xcb_but
 	return false;
 }
 
+/* Undoes what the current event did to the chains while the recorder was
+ * idle, because a hotkey fully matched in that same event and wins over the
+ * chains that merely advanced: rewinds every chain to its head and restores
+ * the grabs of the chain heads, dropping the grabs issued for the chords
+ * expected next. Nothing is reported and no timeout is touched: no chain was
+ * announced with a begin-chain status, and an idle recorder has no alarm. */
+static void discard_partial_matches(void)
+{
+	PUTS("discard partial matches");
+	for (hotkey_t *hk = hotkeys_head; hk != NULL; hk = hk->next)
+		hk->chain->state = hk->chain->head;
+	ungrab();
+	grab();
+}
+
+/* What the walk over the hotkeys concluded about the event. */
+typedef enum {
+	/* No hotkey's command runs; the event may have advanced or rewound
+	 * chains. */
+	EVENT_OUTCOME_NO_HOTKEY,
+	/* A cycle hotkey's command runs. Its chain stays at its tail so that
+	 * repeated presses of the tail chord keep cycling; when that chain has
+	 * more than one chord it therefore stays advanced, and the recorder must
+	 * stay out of the idle phase (with its timeout running) for it. */
+	EVENT_OUTCOME_CYCLE_HOTKEY,
+	/* A hotkey's command runs and its chain is finished with. */
+	EVENT_OUTCOME_COMPLETE_HOTKEY
+} event_outcome_kind_t;
+
+typedef struct {
+	event_outcome_kind_t kind;
+	union {
+		hotkey_t *hotkey; /* valid iff kind != EVENT_OUTCOME_NO_HOTKEY; never NULL */
+	} as;
+} event_outcome_t;
+
+/* Phase transitions of the chain recorder, by phase at entry and outcome of
+ * the walk (see the table in chain_phase.h):
+ *
+ *   IDLE, no hotkey, no chain advanced         -> IDLE
+ *   IDLE, no hotkey, chains advanced           -> IN_PROGRESS, or LOCKED when
+ *                                                 a ':' chord matched (B, abort
+ *                                                 chord grabbed, alarm armed)
+ *   IDLE, a hotkey fired                       -> IDLE; the chains that only
+ *                                                 advanced are rewound
+ *   IN_PROGRESS, no hotkey, none active        -> IDLE via abort_chain (E),
+ *                                                 then the event is matched
+ *                                                 again from IDLE
+ *   IN_PROGRESS, no hotkey, abort chord        -> same
+ *   IN_PROGRESS, no hotkey, chains active      -> IN_PROGRESS (alarm re-armed),
+ *                                                 or LOCKED when a ':' chord
+ *                                                 matched
+ *   IN_PROGRESS, cycle hotkey fired            -> same as the line above
+ *   IN_PROGRESS, complete hotkey fired         -> IDLE via abort_chain (E)
+ *   LOCKED, no hotkey, none active             -> IDLE via abort_chain (E),
+ *                                                 then matched again from IDLE
+ *   LOCKED, no hotkey, abort chord             -> same
+ *   LOCKED, otherwise                          -> LOCKED (no alarm)
+ *
+ * A hotkey that fully matches wins over the abort chord, as it did upstream:
+ * the abort chord is only consulted when no hotkey fired.
+ *
+ * Only the first hotkey whose chain reaches its tail fires, except that the
+ * hotkeys of a cycle group all sit at the same tail and each keeps its own
+ * turn counter; the walk therefore goes on past a cycle hotkey and stops at
+ * a non-cycle one, so that a later non-cycle hotkey with the same chords
+ * wins over the cycle group (upstream behaviour). */
 hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield, uint8_t event_type, bool *replay_event)
 {
-	/* The loop below never changes the phase: its only call to abort_chain()
-	 * is immediately followed by a return. Everything inside the loop therefore
-	 * reasons about the phase as it was when the event arrived. */
+	/* The loop below never changes the phase: everything inside it reasons
+	 * about the phase as it was when the event arrived, and the transitions
+	 * happen after it. */
 	const chain_phase_t chain_phase_at_entry = chain_phase;
+	/* The chains advanced past their head once this event is processed
+	 * (a cycle hotkey's chain resting at a tail that is not its head counts). */
 	int num_active = 0;
 	int num_locked = 0;
 	bool hotkey_reported = false;
-	hotkey_t *result = NULL;
+	event_outcome_t outcome;
+	outcome.kind = EVENT_OUTCOME_NO_HOTKEY;
 
 	for (hotkey_t *hk = hotkeys_head; hk != NULL; hk = hk->next) {
 		chain_t *c = hk->chain;
@@ -134,13 +204,17 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 				if (hk->cycle != NULL) {
 					unsigned char delay = hk->cycle->delay;
 					hk->cycle->delay = (delay == 0 ? hk->cycle->period - 1 : delay - 1);
-					if (delay == 0)
-						result = hk;
+					if (delay == 0) {
+						outcome.kind = EVENT_OUTCOME_CYCLE_HOTKEY;
+						outcome.as.hotkey = hk;
+					}
+					if (c->state != c->head)
+						num_active++;
 					continue;
 				}
-				if (chain_phase_at_entry == CHAIN_PHASE_IN_PROGRESS)
-					abort_chain();
-				return hk;
+				outcome.kind = EVENT_OUTCOME_COMPLETE_HOTKEY;
+				outcome.as.hotkey = hk;
+				break;
 			} else {
 				c->state = c->state->next;
 				num_active++;
@@ -163,31 +237,93 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 		}
 	}
 
-	if (result != NULL)
-		return result;
-
 	switch (chain_phase_at_entry) {
 		case CHAIN_PHASE_IDLE:
-			if (num_active > 0) {
-				chain_phase = (num_locked > 0) ? CHAIN_PHASE_LOCKED : CHAIN_PHASE_IN_PROGRESS;
-				put_status(BEGIN_CHAIN_PREFIX, "Begin chain");
-				grab_abort_chord();
+			switch (outcome.kind) {
+				case EVENT_OUTCOME_NO_HOTKEY:
+					if (num_active > 0) {
+						chain_phase = (num_locked > 0) ? CHAIN_PHASE_LOCKED : CHAIN_PHASE_IN_PROGRESS;
+						put_status(BEGIN_CHAIN_PREFIX, "Begin chain");
+						grab_abort_chord();
+					}
+					break;
+				case EVENT_OUTCOME_CYCLE_HOTKEY:
+				case EVENT_OUTCOME_COMPLETE_HOTKEY:
+					/* From idle, a chain reaches its tail only if that tail is
+					 * also its head, so the hotkey that fired has a single chord
+					 * and any active chain is another hotkey whose chain begins
+					 * with that same chord (a configuration the parser warns
+					 * about). The complete hotkey wins and the others give up:
+					 * this is what already happened when the single-chord
+					 * hotkey came first in the configuration (the walk stopped
+					 * at it before the longer chains were examined), so the two
+					 * orders now agree. Not rewinding would leave those chains
+					 * advanced while idle, where their next chord would fire
+					 * them on its own, again and again. */
+					if (num_active > 0)
+						discard_partial_matches();
+					break;
 			}
 			break;
 		case CHAIN_PHASE_IN_PROGRESS:
+			switch (outcome.kind) {
+				case EVENT_OUTCOME_NO_HOTKEY:
+					if (num_locked > 0)
+						chain_phase = CHAIN_PHASE_LOCKED;
+					if (num_active == 0 || abort_chord_matches(event_type, keysym, button, modfield)) {
+						abort_chain();
+						return find_hotkey(keysym, button, modfield, event_type, replay_event);
+					}
+					break;
+				case EVENT_OUTCOME_CYCLE_HOTKEY:
+					/* The cycle's chain is still advanced, so it was counted
+					 * active above: the chain goes on, and locks if its tail
+					 * chord asked for it. */
+					if (num_locked > 0)
+						chain_phase = CHAIN_PHASE_LOCKED;
+					break;
+				case EVENT_OUTCOME_COMPLETE_HOTKEY:
+					abort_chain();
+					break;
+			}
+			break;
 		case CHAIN_PHASE_LOCKED:
-			if (num_locked > 0)
-				chain_phase = CHAIN_PHASE_LOCKED;
-			if (num_active == 0 || abort_chord_matches(event_type, keysym, button, modfield)) {
-				abort_chain();
-				return find_hotkey(keysym, button, modfield, event_type, replay_event);
+			switch (outcome.kind) {
+				case EVENT_OUTCOME_NO_HOTKEY:
+					if (num_active == 0 || abort_chord_matches(event_type, keysym, button, modfield)) {
+						abort_chain();
+						return find_hotkey(keysym, button, modfield, event_type, replay_event);
+					}
+					break;
+				case EVENT_OUTCOME_CYCLE_HOTKEY:
+				case EVENT_OUTCOME_COMPLETE_HOTKEY:
+					/* The chain stays locked at its tail: the hotkey can fire
+					 * again until the lock is released. */
+					break;
 			}
 			break;
 	}
-	if (chain_phase == CHAIN_PHASE_IN_PROGRESS && timeout > 0)
-		alarm(timeout);
+
+	/* The timeout follows the phase the recorder is now in: only a chain in
+	 * progress has one, and every chord received re-arms it. */
+	switch (chain_phase) {
+		case CHAIN_PHASE_IDLE:
+		case CHAIN_PHASE_LOCKED:
+			break;
+		case CHAIN_PHASE_IN_PROGRESS:
+			if (timeout > 0)
+				alarm(timeout);
+			break;
+	}
 	PRINTF("num active %i\n", num_active);
 
+	switch (outcome.kind) {
+		case EVENT_OUTCOME_NO_HOTKEY:
+			return NULL;
+		case EVENT_OUTCOME_CYCLE_HOTKEY:
+		case EVENT_OUTCOME_COMPLETE_HOTKEY:
+			return outcome.as.hotkey;
+	}
 	return NULL;
 }
 

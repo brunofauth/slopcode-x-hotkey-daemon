@@ -35,13 +35,25 @@
  * This header is deliberately free of X and libc includes so that modules
  * which must stay headless-testable can include it. */
 typedef enum {
-	/* No chain is in progress: every chain sits at its head chord. */
+	/* No chain is in progress: every chain sits at its head chord, no alarm
+	 * is armed and the abort chord is not grabbed. A hotkey that fully
+	 * matches in the same event as chains that merely advance wins over
+	 * them, and those chains are rewound before the event is over, so that
+	 * the phase can stay idle. */
 	CHAIN_PHASE_IDLE,
-	/* At least one chain advanced past its head. The chain aborts when a
-	 * tail is reached, when the abort keysym is pressed, or on timeout. */
+	/* At least one chain sits past its head: waiting for its next chord, or
+	 * (a cycle hotkey) resting at its tail so that the tail chord can be
+	 * pressed again. A timeout applies: whenever `timeout` is positive an
+	 * alarm is armed, and every chord received re-arms it. The chain ends
+	 * when a non-cycle tail is reached, when the abort keysym is pressed,
+	 * when no chain is left past its head, on timeout, on reload and on a
+	 * grab toggle. */
 	CHAIN_PHASE_IN_PROGRESS,
-	/* A chord followed by ':' matched: the chain stays active at its tail
-	 * until the abort keysym is pressed (no timeout applies). */
+	/* A chord followed by ':' matched: the chains that reached their tail
+	 * stay there and their tail chords keep firing, with no timeout (no
+	 * alarm is ever armed in this phase), until the abort keysym is pressed
+	 * or the configuration is reloaded or the bindings are ungrabbed.
+	 * Chains that are past their head but not at their tail are dormant. */
 	CHAIN_PHASE_LOCKED
 } chain_phase_t;
 
