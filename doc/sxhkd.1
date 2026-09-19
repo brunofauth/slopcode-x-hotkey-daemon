@@ -2,12 +2,12 @@
 .\"     Title: sxhkd
 .\"    Author: [see the "Author" section]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 09/17/2026
+.\"      Date: 09/19/2026
 .\"    Manual: Sxhkd Manual
-.\"    Source: Sxhkd 0.7.3
+.\"    Source: Sxhkd 0.7.4
 .\"  Language: English
 .\"
-.TH "SXHKD" "1" "09/17/2026" "Sxhkd 0\&.7\&.3" "Sxhkd Manual"
+.TH "SXHKD" "1" "09/19/2026" "Sxhkd 0\&.7\&.4" "Sxhkd Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -54,11 +54,21 @@ Print the version information to standard output and exit\&.
 Handle the first
 \fICOUNT\fR
 mapping notify events\&.
+\fICOUNT\fR
+is a non\-negative integer, or
+\fI\-1\fR
+to handle all of them (default
+\fI0\fR)\&.
 .RE
 .PP
 \fB\-t\fR, \fB\-\-timeout\fR \fISECONDS\fR
 .RS 4
 Timeout in seconds for the recording of chord chains\&.
+\fISECONDS\fR
+is a non\-negative integer;
+\fI0\fR
+disables the timeout (default
+\fI3\fR)\&.
 .RE
 .PP
 \fB\-c\fR, \fB\-\-config\fR \fIFILE\fR
@@ -80,7 +90,10 @@ section)\&. The FIFO is created if it does not exist\&.
 .PP
 \fB\-a\fR, \fB\-\-abort\-keysym\fR \fIKEYSYM\fR
 .RS 4
-Name of the keysym used for aborting chord chains\&.
+Name of the keysym used for aborting chord chains (default
+\fIEscape\fR)\&. It must have a keycode in the current keymap, otherwise
+\fBsxhkd\fR
+refuses to start\&.
 .RE
 .PP
 \fB\-i\fR, \fB\-\-indicator\fR \fIPOSITION\fR
@@ -138,9 +151,9 @@ Additional configuration files can be passed as arguments\&.
 .sp
 If \fBsxhkd\fR receives a \fISIGUSR1\fR (resp\&. \fISIGUSR2\fR) signal, it will reload its configuration file (resp\&. toggle the grabbing state of all its bindings)\&. Both signals also end the chord chain in progress, if any\&.
 .sp
-If \fBsxhkd\fR recieves a \fISIGALRM\fR signal, it will break the current chain if there is one in progress\&.
+If \fBsxhkd\fR receives a \fISIGALRM\fR signal, it will break the current chain if there is one in progress\&. A locked chain is not affected (it has no timeout)\&.
 .sp
-With the \fB\-i\fR option, \fBsxhkd\fR shows a small window while a chord chain is in progress\&. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below)\&. The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached\&. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size\&. Translucent colors (an alpha below \fIff\fR) need a compositing manager; without one they render darker and fully transparent areas black, and \fBsxhkd\fR warns at startup\&.
+With the \fB\-i\fR option, \fBsxhkd\fR shows a small window while a chord chain is in progress\&. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below)\&. The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached\&. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size\&. Translucent colors (an alpha below \fIff\fR) need a compositing manager and an X server that offers a 32\-bit visual\&. Without a compositing manager they render darker and fully transparent areas black; without a 32\-bit visual they are painted fully opaque\&. \fBsxhkd\fR warns at startup in either case\&.
 .sp
 The commands are executed via \fBSHELL\fR \fI\-c\fR \fBCOMMAND\fR (hence you can use environment variables)\&.
 .sp
@@ -153,7 +166,7 @@ If you have a non\-QWERTY keyboard or a non\-standard layout configuration, you 
 .sp
 With the \fB\-s\fR option, \fBsxhkd\fR reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, \&...) can display the chord chain in progress or react to the commands being run\&.
 .sp
-\fBsxhkd\fR creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place\&. Anything else at the path, or a pipe that cannot be created or opened, is a startup error\&. \fBsxhkd\fR opens the pipe for reading and writing in non\-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe\&. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards\&.
+\fBsxhkd\fR creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place\&. Anything else at the path, or a pipe that cannot be created or opened, is a startup error\&. \fBsxhkd\fR opens the pipe for reading and writing in non\-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe\&. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards\&. The commands \fBsxhkd\fR runs do not inherit the pipe, so a reader sees end\-of\-file once \fBsxhkd\fR exits\&.
 .sp
 Each message is a single line made of a one\-character prefix followed by a text:
 .sp
@@ -308,7 +321,7 @@ When multiple chords are separated by semicolons, the hotkey is a chord chain: t
 .sp
 The colon character can be used instead of the semicolon to indicate that the chord chain shall not be aborted when the chain tail is reached\&.
 .sp
-If a command starts with a semicolon, it will be executed synchronously, otherwise asynchronously\&.
+If a command starts with a semicolon, it will be executed synchronously, otherwise asynchronously\&. While a synchronous command runs, \fBsxhkd\fR handles no events: \fISIGUSR1\fR, \fISIGUSR2\fR and \fISIGALRM\fR are acted upon once the command ends, and \fISIGINT\fR, \fISIGHUP\fR or \fISIGTERM\fR make \fBsxhkd\fR exit without waiting for the command, which keeps running\&.
 .sp
 The \fIEscape\fR key can be used to abort a chord chain\&.
 .sp
