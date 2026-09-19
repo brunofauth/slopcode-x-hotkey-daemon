@@ -32,8 +32,10 @@
 #include "indicator_core.h"
 
 /* Creates the window and rendering resources (or nothing, if disabled).
- * Exits the process through err() if the user asked for an indicator that
- * cannot be set up. Must run before the first call of any other entry point. */
+ * Leaves the indicator disabled, with a warning, when the X server refuses
+ * its window on every visual; exits the process through err() only when the
+ * cairo side cannot be set up. Must run before the first call of any other
+ * entry point. */
 void indicator_init(const indicator_settings_t *settings, xcb_connection_t *connection, xcb_screen_t *screen_of_window, int screen_number);
 
 /* Makes what is on screen match the given recorder state: shows, updates or

@@ -36,14 +36,18 @@ typedef enum {
 	WINDOW_VISUAL_OPAQUE   /* the root visual: alpha is dropped */
 } window_visual_kind_t;
 
+#define ARGB_VISUAL_DEPTH 32
+
 typedef struct {
 	window_visual_kind_t kind;
 	xcb_visualtype_t *visual_type;
-	uint8_t depth;
 	union {
 		struct {
-			xcb_colormap_t colormap;   /* windows on a non-root visual need their own */
-		} argb;                        /* valid iff kind == WINDOW_VISUAL_ARGB */
+			xcb_colormap_t colormap;   /* windows on a non-root visual need their own; ours to free */
+		} argb;                        /* valid iff kind == WINDOW_VISUAL_ARGB; the depth is ARGB_VISUAL_DEPTH */
+		struct {
+			uint8_t depth;             /* the root depth; the server's default colormap serves */
+		} opaque;                      /* valid iff kind == WINDOW_VISUAL_OPAQUE */
 	} as;
 } window_visual_t;
 
@@ -117,7 +121,7 @@ static xcb_visualtype_t *find_argb_visual_type(const xcb_screen_t *screen_of_win
 {
 	xcb_depth_iterator_t depth_iterator = xcb_screen_allowed_depths_iterator(screen_of_window);
 	for (; depth_iterator.rem > 0; xcb_depth_next(&depth_iterator)) {
-		if (depth_iterator.data->depth != 32)
+		if (depth_iterator.data->depth != ARGB_VISUAL_DEPTH)
 			continue;
 		xcb_visualtype_iterator_t visual_iterator = xcb_depth_visuals_iterator(depth_iterator.data);
 		for (; visual_iterator.rem > 0; xcb_visualtype_next(&visual_iterator)) {
@@ -128,30 +132,77 @@ static xcb_visualtype_t *find_argb_visual_type(const xcb_screen_t *screen_of_win
 	return NULL;
 }
 
-/* Prefers a depth-32 visual, which the Composite extension provides on every
- * modern server, so that translucent colors work under a compositing manager;
- * falls back to the root visual otherwise. */
-static window_visual_t choose_window_visual(xcb_connection_t *connection, const xcb_screen_t *screen_of_window)
+/* Waits for a checked request to complete; on failure stores its X error code. */
+static bool checked_request_failed(xcb_connection_t *connection, xcb_void_cookie_t cookie, uint8_t *x_error_code)
+{
+	xcb_generic_error_t *error = xcb_request_check(connection, cookie);
+	if (error == NULL)
+		return false;
+	*x_error_code = error->error_code;
+	free(error);
+	return true;
+}
+
+static uint8_t window_visual_depth(const window_visual_t *visual)
+{
+	uint8_t depth = 0;
+	switch (visual->kind) {
+		case WINDOW_VISUAL_ARGB:
+			depth = ARGB_VISUAL_DEPTH;
+			break;
+		case WINDOW_VISUAL_OPAQUE:
+			depth = visual->as.opaque.depth;
+			break;
+	}
+	return depth;
+}
+
+/* Frees what the visual owns: an ARGB visual's colormap is ours, the root
+ * visual uses the server's default colormap. */
+static void release_window_visual(xcb_connection_t *connection, const window_visual_t *visual)
+{
+	switch (visual->kind) {
+		case WINDOW_VISUAL_ARGB:
+			xcb_free_colormap(connection, visual->as.argb.colormap);
+			break;
+		case WINDOW_VISUAL_OPAQUE:
+			break;
+	}
+}
+
+/* A depth-32 visual, which the Composite extension provides on every modern
+ * server, lets translucent colors work under a compositing manager. Returns
+ * false quietly when the server offers no such visual (the ordinary case
+ * without Composite) and with a warning when it refuses the colormap that a
+ * window on a non-root visual needs. */
+static bool make_argb_window_visual(xcb_connection_t *connection, const xcb_screen_t *screen_of_window, window_visual_t *argb_visual)
 {
 	xcb_visualtype_t *argb_visual_type = find_argb_visual_type(screen_of_window);
-	if (argb_visual_type != NULL) {
-		const xcb_colormap_t colormap = xcb_generate_id(connection);
-		xcb_create_colormap(connection, XCB_COLORMAP_ALLOC_NONE, colormap, screen_of_window->root, argb_visual_type->visual_id);
-		const window_visual_t argb_visual = {
-			.kind = WINDOW_VISUAL_ARGB,
-			.visual_type = argb_visual_type,
-			.depth = 32,
-			.as.argb.colormap = colormap,
-		};
-		return argb_visual;
+	if (argb_visual_type == NULL)
+		return false;
+	const xcb_colormap_t colormap = xcb_generate_id(connection);
+	const xcb_void_cookie_t colormap_cookie = xcb_create_colormap_checked(connection, XCB_COLORMAP_ALLOC_NONE, colormap, screen_of_window->root, argb_visual_type->visual_id);
+	uint8_t x_error_code = 0;
+	if (checked_request_failed(connection, colormap_cookie, &x_error_code)) {
+		warn("Indicator: can't create a colormap for the 32-bit visual (X error %u); falling back to the root visual.\n", x_error_code);
+		return false;
 	}
+	argb_visual->kind = WINDOW_VISUAL_ARGB;
+	argb_visual->visual_type = argb_visual_type;
+	argb_visual->as.argb.colormap = colormap;
+	return true;
+}
+
+/* The root visual: always available, but without an alpha channel. */
+static window_visual_t make_opaque_window_visual(const xcb_screen_t *screen_of_window)
+{
 	xcb_visualtype_t *root_visual_type = find_visual_type(screen_of_window, screen_of_window->root_visual);
 	if (root_visual_type == NULL)
 		err("Indicator: can't find the root visual.\n");
 	const window_visual_t opaque_visual = {
 		.kind = WINDOW_VISUAL_OPAQUE,
 		.visual_type = root_visual_type,
-		.depth = screen_of_window->root_depth,
+		.as.opaque.depth = screen_of_window->root_depth,
 	};
 	return opaque_visual;
 }
@@ -214,7 +265,10 @@ static void make_window_transparent_to_input(xcb_connection_t *connection, xcb_w
 	const xcb_query_extension_reply_t *shape_extension = xcb_get_extension_data(connection, &xcb_shape_id);
 	if (shape_extension == NULL || !shape_extension->present)
 		return;
-	xcb_shape_rectangles(connection, XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, XCB_CLIP_ORDERING_UNSORTED, window, 0, 0, 0, NULL);
+	const xcb_void_cookie_t shape_cookie = xcb_shape_rectangles_checked(connection, XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, XCB_CLIP_ORDERING_UNSORTED, window, 0, 0, 0, NULL);
+	uint8_t x_error_code = 0;
+	if (checked_request_failed(connection, shape_cookie, &x_error_code))
+		warn("Indicator: can't make the window transparent to pointer input (X error %u); clicks on the banner won't fall through.\n", x_error_code);
 }
 
 static int available_text_width_in_pango_units(pixel_size_t screen_size)
@@ -248,8 +302,10 @@ static cairo_status_t paint_banner(const indicator_resources_t *resources)
 {
 	cairo_t *cairo_context = resources->cairo_context;
 	/* SOURCE writes the background's alpha into the surface instead of
-	 * blending it over the previous frame; on an opaque surface cairo drops
-	 * the alpha, exactly as a server without a compositing manager does. */
+	 * blending it over the previous frame. On an opaque surface cairo does
+	 * not drop a translucent source's alpha: it premultiplies the channels
+	 * by it and paints that darker color. Hence init forces both colors
+	 * opaque whenever the window's visual has no alpha channel. */
 	set_source_from_rgba_color(cairo_context, resources->config.background_color);
 	cairo_set_operator(cairo_context, CAIRO_OPERATOR_SOURCE);
 	cairo_paint(cairo_context);
@@ -340,13 +396,7 @@ static void release_resources(indicator_resources_t *resources)
 	cairo_device_finish(resources->device);
 	cairo_device_destroy(resources->device);
 	xcb_destroy_window(resources->connection, resources->window);
-	switch (resources->visual.kind) {
-		case WINDOW_VISUAL_ARGB:
-			xcb_free_colormap(resources->connection, resources->visual.as.argb.colormap);
-			break;
-		case WINDOW_VISUAL_OPAQUE:
-			break;
-	}
+	release_window_visual(resources->connection, &resources->visual);
 	xcb_flush(resources->connection);
 }
 
@@ -359,6 +409,60 @@ static void disable_after_error(cairo_status_t status)
 	indicator_singleton.kind = INDICATOR_DISABLED;
 }
 
+typedef enum {
+	WINDOW_CREATION_SUCCEEDED,
+	WINDOW_CREATION_FAILED
+} window_creation_kind_t;
+
+typedef struct {
+	window_creation_kind_t kind;
+	union {
+		struct {
+			uint8_t x_error_code;
+		} failed;   /* valid iff kind == WINDOW_CREATION_FAILED */
+	} as;
+} window_creation_result_t;
+
+/* Creates the banner window with the given id on the given visual. A refused
+ * CreateWindow creates nothing, so the caller may reuse the id for another
+ * attempt on another visual. */
+static window_creation_result_t create_banner_window(xcb_connection_t *connection, const xcb_screen_t *screen_of_window, const window_visual_t *visual, rgba_color_t background_color, xcb_window_t window)
+{
+	/* Values must follow the ascending bit order of their mask flags. An
+	 * exposure-only event mask and override-redirect make the window
+	 * invisible to the window manager and to keyboard focus. A window on a
+	 * visual other than its parent's must state its border pixel and colormap. */
+	uint32_t attribute_mask = 0;
+	uint32_t attribute_values[6] = {0};
+	switch (visual->kind) {
+		case WINDOW_VISUAL_ARGB:
+			attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP;
+			attribute_values[0] = 0;   /* transparent black until the first paint */
+			attribute_values[1] = 0;
+			attribute_values[2] = 1;
+			attribute_values[3] = 1;
+			attribute_values[4] = XCB_EVENT_MASK_EXPOSURE;
+			attribute_values[5] = visual->as.argb.colormap;
+			break;
+		case WINDOW_VISUAL_OPAQUE:
+			attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK;
+			attribute_values[0] = pixel_from_rgb_color(visual->visual_type, screen_of_window, background_color);
+			attribute_values[1] = 1;
+			attribute_values[2] = 1;
+			attribute_values[3] = XCB_EVENT_MASK_EXPOSURE;
+			break;
+	}
+	/* 1x1 because the protocol rejects zero-sized windows; resized on each show. */
+	const xcb_void_cookie_t create_cookie = xcb_create_window_checked(connection, window_visual_depth(visual), window, screen_of_window->root, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, visual->visual_type->visual_id, attribute_mask, attribute_values);
+	window_creation_result_t result = {.kind = WINDOW_CREATION_SUCCEEDED};
+	uint8_t x_error_code = 0;
+	if (checked_request_failed(connection, create_cookie, &x_error_code)) {
+		result.kind = WINDOW_CREATION_FAILED;
+		result.as.failed.x_error_code = x_error_code;
+	}
+	return result;
+}
+
 void indicator_init(const indicator_settings_t *settings, xcb_connection_t *connection, xcb_screen_t *screen_of_window, int screen_number)
 {
 	switch (settings->kind) {
@@ -369,52 +473,68 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 			break;
 	}
 	const indicator_config_t *config = &settings->as.enabled;
-
-	const window_visual_t visual = choose_window_visual(connection, screen_of_window);
-	if ((rgba_color_is_translucent(config->foreground_color) || rgba_color_is_translucent(config->background_color))
-			&& !compositing_manager_is_running(connection, screen_number))
-		warn("A translucent indicator color was given but no compositing manager is running: translucency needs one.\n");
-
 	const xcb_window_t window = xcb_generate_id(connection);
-	/* Values must follow the ascending bit order of their mask flags. An
-	 * exposure-only event mask and override-redirect make the window
-	 * invisible to the window manager and to keyboard focus. A window on a
-	 * visual other than its parent's must state its border pixel and colormap. */
-	uint32_t attribute_mask = 0;
-	uint32_t attribute_values[6] = {0};
+
+	/* Prefer the 32-bit visual; fall back to the root visual when the server
+	 * offers none or refuses it, and give up on the indicator, but not on
+	 * sxhkd, only if the root visual is refused too. */
+	window_visual_t visual = make_opaque_window_visual(screen_of_window);
+	bool window_created = false;
+	window_visual_t argb_visual;
+	if (make_argb_window_visual(connection, screen_of_window, &argb_visual)) {
+		const window_creation_result_t argb_result = create_banner_window(connection, screen_of_window, &argb_visual, config->background_color, window);
+		switch (argb_result.kind) {
+			case WINDOW_CREATION_SUCCEEDED:
+				visual = argb_visual;
+				window_created = true;
+				break;
+			case WINDOW_CREATION_FAILED:
+				warn("Indicator: can't create the window on the 32-bit visual (X error %u); falling back to the root visual.\n", argb_result.as.failed.x_error_code);
+				release_window_visual(connection, &argb_visual);
+				break;
+		}
+	}
+	if (!window_created) {
+		const window_creation_result_t opaque_result = create_banner_window(connection, screen_of_window, &visual, config->background_color, window);
+		switch (opaque_result.kind) {
+			case WINDOW_CREATION_SUCCEEDED:
+				break;
+			case WINDOW_CREATION_FAILED:
+				warn("Indicator disabled: can't create its window (X error %u).\n", opaque_result.as.failed.x_error_code);
+				indicator_singleton.kind = INDICATOR_DISABLED;
+				xcb_flush(connection);
+				return;
+		}
+	}
+
+	/* Translucency needs an alpha channel, which only the 32-bit visual has,
+	 * and a compositing manager to honor it. Without the alpha channel the
+	 * colors are painted opaque (see paint_banner for why not as given). */
+	indicator_config_t effective_config = *config;
+	const bool translucent_color_given = rgba_color_is_translucent(config->foreground_color) || rgba_color_is_translucent(config->background_color);
 	switch (visual.kind) {
 		case WINDOW_VISUAL_ARGB:
-			attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP;
-			attribute_values[0] = 0;   /* transparent black until the first paint */
-			attribute_values[1] = 0;
-			attribute_values[2] = 1;
-			attribute_values[3] = 1;
-			attribute_values[4] = XCB_EVENT_MASK_EXPOSURE;
-			attribute_values[5] = visual.as.argb.colormap;
+			if (translucent_color_given && !compositing_manager_is_running(connection, screen_number))
+				warn("A translucent indicator color was given but no compositing manager is running: translucency needs one.\n");
 			break;
 		case WINDOW_VISUAL_OPAQUE:
-			attribute_mask = XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_SAVE_UNDER | XCB_CW_EVENT_MASK;
-			attribute_values[0] = pixel_from_rgb_color(visual.visual_type, screen_of_window, config->background_color);
-			attribute_values[1] = 1;
-			attribute_values[2] = 1;
-			attribute_values[3] = XCB_EVENT_MASK_EXPOSURE;
+			if (translucent_color_given)
+				warn("A translucent indicator color was given but the X server offers no 32-bit visual: the colors are painted opaque.\n");
+			effective_config.foreground_color = rgba_color_forced_opaque(config->foreground_color);
+			effective_config.background_color = rgba_color_forced_opaque(config->background_color);
 			break;
 	}
-	/* 1x1 because the protocol rejects zero-sized windows; resized on each show. */
-	const xcb_void_cookie_t create_cookie = xcb_create_window_checked(connection, visual.depth, window, screen_of_window->root, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, visual.visual_type->visual_id, attribute_mask, attribute_values);
-	xcb_generic_error_t *create_error = xcb_request_check(connection, create_cookie);
-	if (create_error != NULL) {
-		const uint8_t error_code = create_error->error_code;
-		free(create_error);
-		err("Indicator: can't create the window (X error %u).\n", error_code);
-	}
+
 	make_window_transparent_to_input(connection, window);
 
 	/* Follow screen size changes: the server sends ConfigureNotify for the
 	 * root window to every client that selects StructureNotify on it, which
 	 * includes resizes driven by RandR. sxhkd selects nothing else on root. */
 	const uint32_t root_event_mask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
-	xcb_change_window_attributes(connection, screen_of_window->root, XCB_CW_EVENT_MASK, &root_event_mask);
+	const xcb_void_cookie_t root_attributes_cookie = xcb_change_window_attributes_checked(connection, screen_of_window->root, XCB_CW_EVENT_MASK, &root_event_mask);
+	uint8_t root_attributes_error_code = 0;
+	if (checked_request_failed(connection, root_attributes_cookie, &root_attributes_error_code))
+		warn("Indicator: can't select StructureNotify on the root window (X error %u); the banner won't follow screen size changes.\n", root_attributes_error_code);
 
 	cairo_surface_t *surface = cairo_xcb_surface_create(connection, window, visual.visual_type, 1, 1);
 	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
@@ -450,7 +570,7 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	enabled->resources.cairo_context = cairo_context;
 	enabled->resources.layout = layout;
 	enabled->resources.font_description = font_description;
-	enabled->resources.config = *config;
+	enabled->resources.config = effective_config;
 	enabled->resources.screen_size = screen_size;
 	enabled->resources.surface_size.width = 1;
 	enabled->resources.surface_size.height = 1;

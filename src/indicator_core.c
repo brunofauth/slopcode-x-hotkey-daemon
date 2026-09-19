@@ -94,6 +94,12 @@ bool rgba_color_is_translucent(rgba_color_t color)
 	return color.alpha != 0xFF;
 }
 
+rgba_color_t rgba_color_forced_opaque(rgba_color_t color)
+{
+	const rgba_color_t opaque_color = {color.red, color.green, color.blue, 0xFF};
+	return opaque_color;
+}
+
 /* A writer that never steps past the end of its buffer and always leaves it
  * NUL-terminated, even if asked to write more than fits. */
 typedef struct {

@@ -118,6 +118,10 @@ bool indicator_parse_position(const char *position_text, indicator_position_t *p
 /* Accepts "#rrggbb" (opaque) and "#rrggbbaa"; never writes on failure. */
 bool indicator_parse_rgba_color(const char *color_text, rgba_color_t *parsed_color);
 bool rgba_color_is_translucent(rgba_color_t color);
+/* The same color with a fully opaque alpha. Used where no alpha channel is
+ * available, so that the user sees the color they typed rather than the
+ * darker premultiplied one cairo would produce from a translucent source. */
+rgba_color_t rgba_color_forced_opaque(rgba_color_t color);
 void indicator_derive_banner(chain_phase_t chain_phase, const char *progress_text, indicator_banner_t *banner);
 uint16_t indicator_pixel_extent_from_int(int32_t extent);
 pixel_origin_t indicator_compute_window_origin(indicator_position_t position, pixel_size_t screen_size, pixel_size_t window_size, uint16_t margin_in_pixels);

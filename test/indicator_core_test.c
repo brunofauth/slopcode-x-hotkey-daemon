@@ -97,6 +97,26 @@ static void test_parse_rgb_color(void)
 	CHECK(color.red == 7 && color.green == 8 && color.blue == 9 && color.alpha == 10);   /* untouched on failure */
 }
 
+static void test_force_opaque(void)
+{
+	const rgba_color_t translucent_color = {0x12, 0x34, 0x56, 0x80};
+	rgba_color_t forced_color = rgba_color_forced_opaque(translucent_color);
+	CHECK(forced_color.red == 0x12 && forced_color.green == 0x34 && forced_color.blue == 0x56);
+	CHECK(forced_color.alpha == 0xff);
+	CHECK(!rgba_color_is_translucent(forced_color));
+
+	/* Fully transparent becomes fully opaque as well: the channels are kept, never premultiplied. */
+	const rgba_color_t transparent_color = {0xff, 0xff, 0xff, 0x00};
+	forced_color = rgba_color_forced_opaque(transparent_color);
+	CHECK(forced_color.red == 0xff && forced_color.green == 0xff && forced_color.blue == 0xff && forced_color.alpha == 0xff);
+
+	const rgba_color_t opaque_color = {0xab, 0xcd, 0xef, 0xff};
+	forced_color = rgba_color_forced_opaque(opaque_color);
+	CHECK(forced_color.red == 0xab && forced_color.green == 0xcd && forced_color.blue == 0xef && forced_color.alpha == 0xff);
+	CHECK(rgba_color_is_translucent(translucent_color));   /* the input is untouched */
+	CHECK(translucent_color.alpha == 0x80);
+}
+
 static void test_derive_banner(void)
 {
 	static indicator_banner_t banner;
@@ -209,6 +229,7 @@ int main(void)
 {
 	test_parse_position();
 	test_parse_rgb_color();
+	test_force_opaque();
 	test_derive_banner();
 	test_pixel_extent_from_int();
 	test_compute_window_origin();
