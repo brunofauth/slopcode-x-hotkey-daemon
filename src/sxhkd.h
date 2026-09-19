@@ -98,7 +98,8 @@ extern volatile sig_atomic_t running, toggle_grab, reload, bell;
 extern sigset_t original_signal_mask;
 extern chain_phase_t chain_phase;
 extern xcb_keysym_t abort_keysym;
-extern chord_t *abort_chord;
+/* Rebuilt on every handled mapping notify (see mapping_notify()). */
+extern abort_chord_t abort_chord;
 
 extern uint16_t num_lock;
 extern uint16_t caps_lock;

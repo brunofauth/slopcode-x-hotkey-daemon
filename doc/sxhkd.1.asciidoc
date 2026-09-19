@@ -47,7 +47,7 @@ Every option has a short and a long form. Long options take their value as *--na
     Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO is created if it does not exist.
 
 *-a*, *--abort-keysym* _KEYSYM_::
-    Name of the keysym used for aborting chord chains.
+    Name of the keysym used for aborting chord chains (default _Escape_). It must have a keycode in the current keymap, otherwise *sxhkd* refuses to start.
 
 *-i*, *--indicator* _POSITION_::
     Show an on-screen indicator while a chord chain is in progress, anchored at the given _POSITION_ of the screen: _top_, _top-left_, _top-right_, _center_, _center-left_, _center-right_, _bottom_, _bottom-left_ or _bottom-right_.

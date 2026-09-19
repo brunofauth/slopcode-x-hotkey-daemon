@@ -80,6 +80,28 @@ static void report_matched_chord(const chord_t *matched_chord, chain_phase_t cha
 	}
 }
 
+static void grab_abort_chord(void)
+{
+	switch (abort_chord.kind) {
+		case ABORT_CHORD_AVAILABLE:
+			grab_chord(abort_chord.as.chord);
+			break;
+		case ABORT_CHORD_UNAVAILABLE:
+			break;
+	}
+}
+
+static bool abort_chord_matches(uint8_t event_type, xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield)
+{
+	switch (abort_chord.kind) {
+		case ABORT_CHORD_AVAILABLE:
+			return match_chord(abort_chord.as.chord, event_type, keysym, button, modfield);
+		case ABORT_CHORD_UNAVAILABLE:
+			return false;
+	}
+	return false;
+}
+
 hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield, uint8_t event_type, bool *replay_event)
 {
 	/* The loop below never changes the phase: its only call to abort_chain()
@@ -149,14 +171,14 @@ hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfiel
 			if (num_active > 0) {
 				chain_phase = (num_locked > 0) ? CHAIN_PHASE_LOCKED : CHAIN_PHASE_IN_PROGRESS;
 				put_status(BEGIN_CHAIN_PREFIX, "Begin chain");
-				grab_chord(abort_chord);
+				grab_abort_chord();
 			}
 			break;
 		case CHAIN_PHASE_IN_PROGRESS:
 		case CHAIN_PHASE_LOCKED:
 			if (num_locked > 0)
 				chain_phase = CHAIN_PHASE_LOCKED;
-			if (num_active == 0 || match_chord(abort_chord, event_type, keysym, button, modfield)) {
+			if (num_active == 0 || abort_chord_matches(event_type, keysym, button, modfield)) {
 				abort_chain();
 				return find_hotkey(keysym, button, modfield, event_type, replay_event);
 			}
@@ -254,6 +276,30 @@ chord_t *make_chord(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield,
 		PRINTF("button chord %u %u\n", button, modfield);
 	}
 	return chord;
+}
+
+abort_chord_t make_abort_chord(xcb_keysym_t keysym_that_aborts_chains)
+{
+	abort_chord_t made;
+	chord_t *chord = make_chord(keysym_that_aborts_chains, XCB_NONE, 0, XCB_KEY_PRESS, false, false);
+	if (chord == NULL) {
+		made.kind = ABORT_CHORD_UNAVAILABLE;
+	} else {
+		made.kind = ABORT_CHORD_AVAILABLE;
+		made.as.chord = chord;
+	}
+	return made;
+}
+
+void destroy_abort_chord(abort_chord_t destroyed_abort_chord)
+{
+	switch (destroyed_abort_chord.kind) {
+		case ABORT_CHORD_AVAILABLE:
+			destroy_chord(destroyed_abort_chord.as.chord);
+			break;
+		case ABORT_CHORD_UNAVAILABLE:
+			break;
+	}
 }
 
 void add_chord(chain_t *chain, chord_t *chord)

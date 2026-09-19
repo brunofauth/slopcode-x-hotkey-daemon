@@ -2724,7 +2724,7 @@ bool parse_chain(char *string, chain_t *chain)
 	return true;
 }
 
-bool parse_keysym(char *name, xcb_keysym_t *keysym)
+bool parse_keysym(const char *name, xcb_keysym_t *keysym)
 {
 	for (unsigned int i = 0; i < LENGTH(nks_dict); i++) {
 		keysym_dict_t nks = nks_dict[i];

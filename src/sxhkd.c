@@ -33,6 +33,7 @@
 #include <xcb/xcb_event.h>
 #include <xcb/xkb.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,7 +74,7 @@ volatile sig_atomic_t running, toggle_grab, reload, bell;
 sigset_t original_signal_mask;
 chain_phase_t chain_phase;
 xcb_keysym_t abort_keysym;
-chord_t *abort_chord;
+abort_chord_t abort_chord;
 
 uint16_t num_lock;
 uint16_t caps_lock;
@@ -114,10 +115,11 @@ int main(int argc, char *argv[])
 			err("Can't open the command redirection file '%s': %s.\n", options->redirect_path, strerror(errno));
 	}
 
+	const char *abort_keysym_name = "Escape";
 	if (options->abort_keysym_name != NULL) {
-		/* parse_keysym only reads its argument; its signature predates const. */
-		if (!parse_keysym((char *) options->abort_keysym_name, &abort_keysym))
-			err("Invalid keysym name: '%s'.\n", options->abort_keysym_name);
+		abort_keysym_name = options->abort_keysym_name;
+		if (!parse_keysym(abort_keysym_name, &abort_keysym))
+			err("Invalid keysym name: '%s'.\n", abort_keysym_name);
 	}
 
 	if (options->indicator_look_given_without_position)
@@ -154,7 +156,13 @@ int main(int argc, char *argv[])
 	indicator_init(&options->indicator, dpy, screen, screen_number);
 	get_standard_keysyms();
 	get_lock_fields();
-	abort_chord = make_chord(abort_keysym, XCB_NONE, 0, XCB_KEY_PRESS, false, false);
+	abort_chord = make_abort_chord(abort_keysym);
+	switch (abort_chord.kind) {
+		case ABORT_CHORD_AVAILABLE:
+			break;
+		case ABORT_CHORD_UNAVAILABLE:
+			err("The abort keysym '%s' has no keycode in the current keymap.\n", abort_keysym_name);
+	}
 	load_config(config_file);
 	for (int i = 0; i < num_extra_confs; i++)
 		load_config(extra_confs[i]);
@@ -275,7 +283,7 @@ int main(int argc, char *argv[])
 	ungrab();
 	indicator_shutdown();
 	cleanup();
-	destroy_chord(abort_chord);
+	destroy_abort_chord(abort_chord);
 	xcb_key_symbols_free(symbols);
 	xcb_disconnect(dpy);
 	return EXIT_SUCCESS;
@@ -329,10 +337,24 @@ void mapping_notify(xcb_generic_event_t *evt)
 	if (e->request == XCB_MAPPING_POINTER)
 		return;
 	if (xcb_refresh_keyboard_mapping(symbols, e) == 1) {
-		destroy_chord(abort_chord);
+		/* The old chord described the old keymap; replace it before anything
+		 * else runs so that the global never holds a freed chord. The new
+		 * keymap may lack the abort keysym altogether: the daemon goes on,
+		 * but without it a chain in progress ends only by reaching a tail or
+		 * by timeout, and a locked chain only by SIGUSR1 or SIGUSR2.
+		 * reload_cmd() below ends the chain in progress, if any, and rebuilds
+		 * the grabs, so no grab of the old chord survives. */
+		destroy_abort_chord(abort_chord);
+		abort_chord = make_abort_chord(abort_keysym);
+		switch (abort_chord.kind) {
+			case ABORT_CHORD_AVAILABLE:
+				break;
+			case ABORT_CHORD_UNAVAILABLE:
+				warn("The abort keysym 0x%" PRIx32 " has no keycode in the new keymap: until the keymap changes again, chord chains can end only by completing or by timeout.\n", abort_keysym);
+				break;
+		}
 		get_lock_fields();
 		reload_cmd();
-		abort_chord = make_chord(abort_keysym, XCB_NONE, 0, XCB_KEY_PRESS, false, false);
 		if (mapping_count > 0)
 			mapping_count--;
 	}

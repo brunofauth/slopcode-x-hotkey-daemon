@@ -82,10 +82,40 @@ typedef struct {
 	xcb_keysym_t keysym;
 } keysym_dict_t;
 
+/* The chord that aborts a chord chain, built from the abort keysym against
+ * the current keymap. A keysym with no keycode in that keymap (a valid name
+ * given to -a but absent from the layout, or a layout switch under -m that
+ * dropped it) yields no chord at all; that state is spelled out here rather
+ * than carried as a null pointer, so that every user has to decide what an
+ * unavailable abort chord means for it. */
+typedef enum {
+	/* The abort keysym has a keycode: the chord is grabbed while a chain is
+	 * in progress and pressing it aborts the chain. */
+	ABORT_CHORD_AVAILABLE,
+	/* The abort keysym has no keycode: a chain can end only by reaching a
+	 * tail, by timeout, or (a locked chain) by a reload or a grab toggle. */
+	ABORT_CHORD_UNAVAILABLE
+} abort_chord_kind_t;
+
+typedef struct {
+	abort_chord_kind_t kind;
+	union {
+		chord_t *chord; /* valid iff kind == ABORT_CHORD_AVAILABLE; never NULL */
+	} as;
+} abort_chord_t;
+
 hotkey_t *find_hotkey(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield, uint8_t event_type, bool *replay_event);
 bool match_chord(chord_t *chord, uint8_t event_type, xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield);
 bool chains_interfere(chain_t* a, chain_t* b);
+/* Returns NULL for a key chord whose keysym has no keycode in the current
+ * keymap (the parser relies on this to reject the hotkey); never for a
+ * button chord. */
 chord_t *make_chord(xcb_keysym_t keysym, xcb_button_t button, uint16_t modfield, uint8_t event_type, bool replay_event, bool lock_chain);
+/* Wraps make_chord() for the abort keysym: ABORT_CHORD_UNAVAILABLE when the
+ * keysym has no keycode in the current keymap. */
+abort_chord_t make_abort_chord(xcb_keysym_t keysym_that_aborts_chains);
+/* Frees the chord, if there is one. The argument is not usable afterwards. */
+void destroy_abort_chord(abort_chord_t destroyed_abort_chord);
 void add_chord(chain_t *chain, chord_t *chord);
 chain_t *make_chain(void);
 cycle_t *make_cycle(int delay, int period);
@@ -97,6 +127,7 @@ void reset_chain_recorder(void);
 /* reset_chain_recorder() followed by restoring the grabs of the chain heads. */
 void abort_chain(void);
 void destroy_chain(chain_t *chain);
+/* The chord must not be NULL. */
 void destroy_chord(chord_t *chord);
 
 #endif

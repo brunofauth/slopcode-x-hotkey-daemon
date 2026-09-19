@@ -22,6 +22,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Modifications Copyright (c) 2026 Bruno Fauth
+ *
+ * This file is part of a fork of sxhkd distributed as a whole under the GNU
+ * General Public License, version 3 or (at your option) any later version;
+ * see LICENSE. The original code remains available under the BSD 2-Clause
+ * license reproduced above and in LICENSE.BSD-2-Clause.
+ */
+
 #ifndef SXHKD_PARSE_H
 #define SXHKD_PARSE_H
 
@@ -60,7 +68,7 @@ chunk_t *extract_chunks(char *s);
 chunk_t *make_chunk(void);
 void destroy_chunks(chunk_t *chunk);
 bool parse_chain(char *string, chain_t *chain);
-bool parse_keysym(char *name, xcb_keysym_t *keysym);
+bool parse_keysym(const char *name, xcb_keysym_t *keysym);
 bool parse_button(char *name, xcb_button_t *butidx);
 bool parse_modifier(char *name, uint16_t *modfield);
 bool parse_fold(char *string, char *folded_string);
