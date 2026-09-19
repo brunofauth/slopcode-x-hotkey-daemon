@@ -35,11 +35,17 @@ BINPREFIX ?= $(PREFIX)/bin
 MANPREFIX ?= $(PREFIX)/share/man
 DOCPREFIX ?= $(PREFIX)/share/doc/$(OUT)
 
-all: $(OUT)
+all: $(OUT) ## Build sxhkd (the default)
+
+# Every target followed by "## text" is listed by `make help`: the recipe
+# lines below must start with a tab, as in any other rule.
+help: ## Show this help message
+	@echo "Available targets:"
+	@grep -hE '^[a-zA-Z_-]+:.*## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 debug: override CFLAGS += -O0 -g
 debug: override CPPFLAGS += -DDEBUG
-debug: $(OUT)
+debug: $(OUT) ## Build sxhkd unoptimised with debugging symbols and DEBUG output
 
 VPATH = src
 OBJ   =
@@ -60,7 +66,7 @@ check-indicator-deps:
 
 ANALYZE_SRC = src/indicator_core.c src/indicator.c src/options.c
 
-analyze:
+analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator and option sources
 	for source in $(ANALYZE_SRC); do \
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(STRICT_CFLAGS) -Werror -fanalyzer -c -o /dev/null $$source || exit 1; \
 	done
@@ -75,7 +81,7 @@ TEST_BINS = test/indicator_core_test test/options_test
 
 $(TEST_BINS): Makefile
 
-check: $(TEST_BINS)
+check: $(TEST_BINS) ## Build and run the unit tests (TEST_CFLAGS, WERROR=-Werror)
 	./test/indicator_core_test
 	./test/options_test
 
@@ -85,7 +91,7 @@ test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/in
 test/options_test: test/options_test.c src/options.c src/options.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/indicator_core.c
 
-install:
+install: ## Install the program, man page and examples under PREFIX
 	mkdir -p "$(DESTDIR)$(BINPREFIX)"
 	cp -pf $(OUT) "$(DESTDIR)$(BINPREFIX)"
 	mkdir -p "$(DESTDIR)$(MANPREFIX)"/man1
@@ -93,15 +99,15 @@ install:
 	mkdir -p "$(DESTDIR)$(DOCPREFIX)"
 	cp -pr examples "$(DESTDIR)$(DOCPREFIX)"/examples
 
-uninstall:
+uninstall: ## Remove what install put under PREFIX
 	rm -f "$(DESTDIR)$(BINPREFIX)"/$(OUT)
 	rm -f "$(DESTDIR)$(MANPREFIX)"/man1/$(OUT).1
 	rm -rf "$(DESTDIR)$(DOCPREFIX)"
 
-doc:
+doc: ## Regenerate the man page from doc/sxhkd.1.asciidoc (needs a2x)
 	a2x -v -d manpage -f manpage -a revnumber=$(VERSION) doc/$(OUT).1.asciidoc
 
-clean:
+clean: ## Remove the objects, the program and the test binaries
 	rm -f $(OBJ) $(OUT) $(TEST_BINS)
 
-.PHONY: all debug install uninstall doc clean check check-indicator-deps analyze
+.PHONY: all debug install uninstall doc clean check check-indicator-deps analyze help
