@@ -30,6 +30,7 @@
  * license reproduced above and in LICENSE.BSD-2-Clause.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -40,6 +41,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include "sxhkd.h"
+
+static void wait_for_child(pid_t child_pid);
 
 void warn(char *fmt, ...)
 {
@@ -67,22 +70,62 @@ void run(char *command, bool sync)
 
 void spawn(char *cmd[], bool sync)
 {
-	/* Children inherit the X connection and the chain indicator's cairo and
-	 * pango state in memory. They must neither use them nor call any
-	 * indicator function: they close the connection and exec or exit. */
-	if (fork() == 0) {
+	const pid_t child_pid = fork();
+	if (child_pid == -1) {
+		warn("Can't fork to run the command: %s.\n", strerror(errno));
+		return;
+	}
+	if (child_pid == 0) {
+		/* Children inherit the X connection and the chain indicator's cairo
+		 * and pango state in memory. They must neither use them nor call any
+		 * indicator function: they close the connection and exec or exit. */
 		if (dpy != NULL)
 			close(xcb_get_file_descriptor(dpy));
-		if (sync) {
+		if (sync)
 			execute(cmd);
-		} else {
-			if (fork() == 0) {
-				execute(cmd);
-			}
-			exit(EXIT_SUCCESS);
-		}
+		/* Asynchronous: exec from a grandchild, which init reaps, so that the
+		 * daemon never has to. */
+		const pid_t grandchild_pid = fork();
+		if (grandchild_pid == -1)
+			warn("Can't fork to run the command: %s.\n", strerror(errno));
+		else if (grandchild_pid == 0)
+			execute(cmd);
+		/* _exit(): the daemon's stdio buffers were duplicated by fork and must
+		 * not be flushed a second time from here, and no atexit handler may
+		 * run in a child (see fail_status_fifo()). */
+		_exit(grandchild_pid == -1 ? EXIT_FAILURE : EXIT_SUCCESS);
 	}
-	wait(NULL);
+	wait_for_child(child_pid);
+}
+
+/* The main loop keeps the handled signals blocked; waiting with that mask
+ * would make a hanging synchronous command leave sxhkd unstoppable and
+ * unreloadable. Wait with the mask sxhkd was started with instead, then put
+ * the loop's mask back so that its invariant (handled signals blocked in the
+ * loop body) holds again when this returns. A terminating signal stops the
+ * wait: the daemon goes on to shut down and the command keeps running on its
+ * own (it has its own session); init reaps it. Every other handled signal
+ * only sets its flag, which the loop examines once the command has ended.
+ * For an asynchronous command the child exits at once, so the wait is
+ * short. */
+static void wait_for_child(pid_t child_pid)
+{
+	sigset_t loop_signal_mask;
+	if (sigprocmask(SIG_SETMASK, &original_signal_mask, &loop_signal_mask) != 0)
+		err("Can't unblock the handled signals: %s.\n", strerror(errno));
+	for (;;) {
+		if (waitpid(child_pid, NULL, 0) == child_pid)
+			break;
+		if (errno == EINTR) {
+			if (!running)
+				break;
+			continue;
+		}
+		warn("Can't wait for the command: %s.\n", strerror(errno));
+		break;
+	}
+	if (sigprocmask(SIG_SETMASK, &loop_signal_mask, NULL) != 0)
+		err("Can't block the handled signals: %s.\n", strerror(errno));
 }
 
 void execute(char *cmd[])
@@ -97,7 +140,12 @@ void execute(char *cmd[])
 		close(redir_fd);
 	}
 	execvp(cmd[0], cmd);
-	err("Spawning failed.\n");
+	/* Only reached when the exec failed. This is the child: report on the
+	 * inherited stderr (unbuffered) and leave through _exit() so that the
+	 * daemon's stdio buffers are not flushed a second time and no atexit
+	 * handler runs. */
+	warn("Can't execute '%s': %s.\n", cmd[0], strerror(errno));
+	_exit(EXIT_FAILURE);
 }
 
 char *lgraph(char *s)

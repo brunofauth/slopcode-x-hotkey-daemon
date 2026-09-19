@@ -92,7 +92,9 @@ extern bool grabbed;
 /* Written from the signal handler, read by the main loop. */
 extern volatile sig_atomic_t running, toggle_grab, reload, bell;
 /* The signal mask sxhkd was started with; the main loop blocks the handled
- * signals outside pselect(), and children must not inherit that. */
+ * signals outside pselect() and while it waits for a synchronous command
+ * (see spawn()), and children must not inherit that. Valid only once the
+ * main loop's mask setup has run; run() is only ever called from the loop. */
 extern sigset_t original_signal_mask;
 extern chain_phase_t chain_phase;
 extern xcb_keysym_t abort_keysym;

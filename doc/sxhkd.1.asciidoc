@@ -182,7 +182,7 @@ When multiple chords are separated by semicolons, the hotkey is a chord chain: t
 
 The colon character can be used instead of the semicolon to indicate that the chord chain shall not be aborted when the chain tail is reached.
 
-If a command starts with a semicolon, it will be executed synchronously, otherwise asynchronously.
+If a command starts with a semicolon, it will be executed synchronously, otherwise asynchronously. While a synchronous command runs, *sxhkd* handles no events: _SIGUSR1_, _SIGUSR2_ and _SIGALRM_ are acted upon once the command ends, and _SIGINT_, _SIGHUP_ or _SIGTERM_ make *sxhkd* exit without waiting for the command, which keeps running.
 
 The _Escape_ key can be used to abort a chord chain.
 

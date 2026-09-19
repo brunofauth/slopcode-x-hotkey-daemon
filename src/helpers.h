@@ -48,6 +48,8 @@ __attribute__((format(printf, 1, 2)))
 void warn(char *fmt, ...);
 __attribute__((noreturn, format(printf, 1, 2)))
 void err(char *fmt, ...);
+/* Runs only in a forked child: execs the command or leaves through _exit(). */
+__attribute__((noreturn))
 void execute(char *cmd[]);
 void spawn(char *cmd[], bool sync);
 void run(char *command, bool sync);

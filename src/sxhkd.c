@@ -171,8 +171,11 @@ int main(int argc, char *argv[])
 	 * delivered inside pselect(), which installs the original mask atomically
 	 * for the duration of the wait. A signal can therefore no longer slip in
 	 * between the flag checks and the wait, where it would have gone
-	 * unnoticed until the next X event. Children restore the original mask
-	 * before exec (see execute()). */
+	 * unnoticed until the next X event. The one other place that lifts the
+	 * block is spawn() while it waits for a synchronous command, so that such
+	 * a command cannot make sxhkd unstoppable; it restores the block before
+	 * returning to the loop. Children restore the original mask before exec
+	 * (see execute()). */
 	sigset_t handled_signals;
 	sigemptyset(&handled_signals);
 	sigaddset(&handled_signals, SIGINT);
@@ -424,9 +427,10 @@ static void install_signal_handler(int signal_number, void (*handler)(int))
 
 /* Aborts startup because the status FIFO is unusable, removing it first if
  * this run created it. There is deliberately no atexit() handler for the
- * removal: spawn()'s children exit through exit()/err() too and must never
- * remove the FIFO under the running daemon. As a consequence a fatal error
- * later in startup leaves a created FIFO behind, which the next run reuses. */
+ * removal: spawn()'s children leave through _exit() precisely so that no
+ * such handler could run in them and remove the FIFO under the running
+ * daemon, and that must stay true. As a consequence a fatal error later in
+ * startup leaves a created FIFO behind, which the next run reuses. */
 static void fail_status_fifo(const char *fifo_path, status_fifo_ownership_t ownership, const char *problem)
 {
 	const int saved_errno = errno;
