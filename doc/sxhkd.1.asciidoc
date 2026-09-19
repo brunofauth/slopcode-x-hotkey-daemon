@@ -91,7 +91,7 @@ Status FIFO
 
 With the *-s* option, *sxhkd* reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, …) can display the chord chain in progress or react to the commands being run.
 
-*sxhkd* creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place. Anything else at the path, or a pipe that cannot be created or opened, is a startup error. *sxhkd* opens the pipe for reading and writing in non-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards.
+*sxhkd* creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place. Anything else at the path, or a pipe that cannot be created or opened, is a startup error. *sxhkd* opens the pipe for reading and writing in non-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards. The commands *sxhkd* runs do not inherit the pipe, so a reader sees end-of-file once *sxhkd* exits.
 
 Each message is a single line made of a one-character prefix followed by a text:
 

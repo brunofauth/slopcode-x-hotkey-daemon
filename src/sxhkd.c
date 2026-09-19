@@ -436,6 +436,13 @@ status_fifo_t open_status_fifo(const char *fifo_path)
 	if (fifo_fd == -1)
 		fail_status_fifo(fifo_path, ownership, "Can't open");
 
+	/* Commands must not inherit the FIFO: a child holding a write end keeps
+	 * readers from seeing end-of-file after sxhkd exits, and could read or
+	 * inject status lines. O_CLOEXEC is not visible under _POSIX_C_SOURCE
+	 * 200112L, so set the flag afterwards. */
+	if (fcntl(fifo_fd, F_SETFD, FD_CLOEXEC) == -1)
+		fail_status_fifo(fifo_path, ownership, "Can't set close-on-exec on");
+
 	struct stat fifo_status;
 	if (fstat(fifo_fd, &fifo_status) != 0)
 		fail_status_fifo(fifo_path, ownership, "Can't inspect");
