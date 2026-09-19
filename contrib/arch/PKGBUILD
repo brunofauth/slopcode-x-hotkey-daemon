@@ -1,14 +1,15 @@
 # Maintainer: Bruno Fauth <brunovfauth@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=sxhkd-git
-pkgver=0.7.0.r1.g4ce667b
+pkgver=0.7.3.r1.gdfe5e49
 pkgrel=1
 pkgdesc='Simple X hotkey daemon, with an on-screen chord-chain indicator'
 arch=('x86_64' 'aarch64')
 url='https://github.com/brunofauth/slopcode-x-hotkey-daemon'
 license=('GPL-3.0-or-later' 'BSD-2-Clause')
-depends=('libxcb' 'xcb-util' 'xcb-util-keysyms' 'cairo' 'pango')
-makedepends=('git' 'pkgconf')
+depends=('libxcb' 'xcb-util-keysyms' 'cairo' 'pango')
+# xcb-util only provides xcb/xcb_event.h (macros); nothing links libxcb-util.
+makedepends=('git' 'pkgconf' 'xcb-util')
 provides=('sxhkd')
 conflicts=('sxhkd')
 # By default this builds the repository the PKGBUILD lives in, so nothing has
@@ -30,7 +31,9 @@ build() {
 
 check() {
 	cd sxhkd
-	make check
+	# UBSan only: no -Werror (compiler-version dependent) and no ASan
+	# (needs libasan and fights the hardening flags of some toolchains).
+	make check TEST_CFLAGS=-fsanitize=undefined
 }
 
 package() {

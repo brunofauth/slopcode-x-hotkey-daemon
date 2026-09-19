@@ -97,6 +97,14 @@ Set `SXHKD_GIT_URL` to a clone URL to build another repository instead.
 analysis, and `nix develop` opens a shell with every build and test tool.
 
 
+### Tests
+
+`make check` builds and runs the headless unit tests with ASan and UBSan
+(`TEST_CFLAGS` overrides the sanitizers, e.g. `TEST_CFLAGS=` for none).
+`-Werror` is opt-in, `make check WERROR=-Werror`, so that a warning added by a
+newer compiler does not break package builds; `make analyze` always uses it.
+
+
 ## Example Bindings
 
 	XF86Audio{Prev,Next}

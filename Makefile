@@ -11,8 +11,10 @@ INDICATOR_PKGS    = cairo cairo-xcb pango pangocairo
 INDICATOR_CFLAGS  = $(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags $(INDICATOR_PKGS)))
 INDICATOR_LIBS    = $(shell $(PKG_CONFIG) --libs $(INDICATOR_PKGS))
 
-CPPFLAGS += -D_POSIX_C_SOURCE=200112L -DVERSION=\"$(VERSION)\" $(INDICATOR_CFLAGS)
-CFLAGS   += -std=c99 -pedantic -Wall -Wextra
+# `override` keeps the mandatory flags when CFLAGS/CPPFLAGS are given on the
+# make command line (as packagers do), not only through the environment.
+override CPPFLAGS += -D_POSIX_C_SOURCE=200112L -DVERSION=\"$(VERSION)\" $(INDICATOR_CFLAGS)
+override CFLAGS   += -std=c99 -pedantic -Wall -Wextra
 LDFLAGS  ?=
 
 # Stricter diagnostics, applied to the chain indicator objects and to the
@@ -22,7 +24,11 @@ STRICT_CFLAGS = -Wshadow -Wconversion -Wsign-conversion -Wstrict-prototypes -Wmi
                 -Wold-style-definition -Wvla -Wswitch-enum -Wcast-qual -Wundef -Wdouble-promotion \
                 -Wformat=2 -Wnull-dereference -Wimplicit-fallthrough
 TEST_CFLAGS  ?= -fsanitize=address,undefined
-LDLIBS    = $(LDFLAGS) -lxcb -lxcb-keysyms -lxcb-xkb -lxcb-shape $(INDICATOR_LIBS)
+# -Werror is opt-in for `check` (make check WERROR=-Werror): a warning added by
+# a newer compiler must not break package builds. `analyze` always uses it, as
+# the strictness gate.
+WERROR       ?=
+LDLIBS    = -lxcb -lxcb-keysyms -lxcb-xkb -lxcb-shape $(INDICATOR_LIBS)
 
 PREFIX    ?= /usr/local
 BINPREFIX ?= $(PREFIX)/bin
@@ -31,8 +37,8 @@ DOCPREFIX ?= $(PREFIX)/share/doc/$(OUT)
 
 all: $(OUT)
 
-debug: CFLAGS += -O0 -g
-debug: CPPFLAGS += -DDEBUG
+debug: override CFLAGS += -O0 -g
+debug: override CPPFLAGS += -DDEBUG
 debug: $(OUT)
 
 VPATH = src
@@ -44,7 +50,7 @@ $(OBJ): Makefile | check-indicator-deps
 
 $(OUT): $(OBJ)
 
-indicator_core.o indicator.o options.o: CFLAGS += $(STRICT_CFLAGS)
+indicator_core.o indicator.o options.o: override CFLAGS += $(STRICT_CFLAGS)
 
 check-indicator-deps:
 	@$(PKG_CONFIG) --exists $(INDICATOR_PKGS) || { \
@@ -67,15 +73,17 @@ analyze:
 
 TEST_BINS = test/indicator_core_test test/options_test
 
+$(TEST_BINS): Makefile
+
 check: $(TEST_BINS)
 	./test/indicator_core_test
 	./test/options_test
 
 test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
-	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) -Werror $(TEST_CFLAGS) -Isrc -o $@ test/indicator_core_test.c src/indicator_core.c
+	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/indicator_core_test.c src/indicator_core.c
 
 test/options_test: test/options_test.c src/options.c src/options.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
-	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) -Werror $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/indicator_core.c
+	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/indicator_core.c
 
 install:
 	mkdir -p "$(DESTDIR)$(BINPREFIX)"

@@ -37,9 +37,11 @@
         # sanitizer runtimes of ASan and glibc's fortified functions, which the
         # Nix compiler wrapper enables, do not cooperate. The dev shell below
         # disables fortification so that `make check` there runs ASan as well.
+        # -Werror is opt-in in the Makefile; nixpkgs pins the compiler, so it is
+        # safe to turn on here and keeps this CI-style build strict.
         doCheck = true;
         checkTarget = "check";
-        checkFlags = [ "TEST_CFLAGS=-fsanitize=undefined" ];
+        checkFlags = [ "TEST_CFLAGS=-fsanitize=undefined" "WERROR=-Werror" ];
 
         meta = with pkgs.lib; {
           description = "Simple X hotkey daemon";
