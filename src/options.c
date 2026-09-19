@@ -18,6 +18,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -75,7 +76,7 @@ static const option_spec_t option_specs[] = {
 	FLAG('h', "help", FLAG_HELP, "Print this help and exit."),
 	FLAG('v', "version", FLAG_VERSION, "Print the version and exit."),
 	VALUED('m', "mapping-count", VALUED_MAPPING_COUNT, "COUNT",
-		"Handle the first COUNT mapping notify events; -1: all (default 0)."),
+		"Handle the first COUNT (>= 0) mapping notify events; -1: all (default 0)."),
 	VALUED('t', "timeout", VALUED_TIMEOUT, "SECONDS",
 		"Abort a chord chain after SECONDS without a chord; 0: never (default 3)."),
 	VALUED('c', "config", VALUED_CONFIG, "FILE",
@@ -135,9 +136,13 @@ static void set_invalid(command_line_t *result, const char *format, ...)
 	va_end(arguments);
 }
 
+/* Accepts exactly an optional '-' followed by decimal digits, within
+ * [minimum, maximum]. Stricter than strtol, which also takes leading
+ * whitespace and a '+' sign. */
 static bool parse_integer(const char *text, long minimum, long maximum, int *parsed_value)
 {
-	if (text[0] == '\0')
+	const char *first_digit = (text[0] == '-') ? text + 1 : text;
+	if (!isdigit((unsigned char) first_digit[0]))
 		return false;
 	char *end_of_number = NULL;
 	errno = 0;
@@ -178,8 +183,8 @@ static void apply_valued(parser_state_t *state, valued_option_t option, const ch
 	run_options_t *run_options = &result->as.run;
 	switch (option) {
 		case VALUED_MAPPING_COUNT:
-			if (!parse_integer(value, INT_MIN, INT_MAX, &run_options->mapping_count))
-				set_invalid(result, "invalid value '%s' for %s: expected an integer", value, option_as_written);
+			if (!parse_integer(value, -1, INT_MAX, &run_options->mapping_count))
+				set_invalid(result, "invalid value '%s' for %s: expected -1 or a non-negative integer", value, option_as_written);
 			return;
 		case VALUED_TIMEOUT:
 			if (!parse_integer(value, 0, INT_MAX, &run_options->timeout_in_seconds))
@@ -207,10 +212,6 @@ static void apply_valued(parser_state_t *state, valued_option_t option, const ch
 			state->indicator_position_given = true;
 			return;
 		case VALUED_INDICATOR_FONT:
-			if (value[0] == '\0') {
-				set_invalid(result, "invalid value '' for %s: expected a Pango font description", option_as_written);
-				return;
-			}
 			state->indicator_config.font_description_text = value;
 			state->indicator_look_given = true;
 			return;
@@ -285,16 +286,25 @@ static void apply_spec(parser_state_t *state, const option_spec_t *spec, const c
 			}
 			apply_flag(state, spec->as.flag);
 			return;
-		case OPTION_KIND_VALUED:
-			if (inline_value != NULL) {
-				apply_valued(state, spec->as.valued.id, option_as_written, inline_value);
-			} else if (*index + 1 < argument_count) {
+		case OPTION_KIND_VALUED: {
+			const char *value = inline_value;
+			if (value == NULL) {
+				if (*index + 1 >= argument_count) {
+					set_invalid(&state->result, "option '%s' requires an argument %s", option_as_written, spec->as.valued.argument_name);
+					return;
+				}
 				*index += 1;
-				apply_valued(state, spec->as.valued.id, option_as_written, arguments[*index]);
-			} else {
-				set_invalid(&state->result, "option '%s' requires an argument %s", option_as_written, spec->as.valued.argument_name);
+				value = arguments[*index];
 			}
+			/* No valued option has a meaningful empty value: an empty path,
+			 * keysym or number would only fail later, or silently misbehave. */
+			if (value[0] == '\0') {
+				set_invalid(&state->result, "invalid value '' for %s: expected a non-empty %s", option_as_written, spec->as.valued.argument_name);
+				return;
+			}
+			apply_valued(state, spec->as.valued.id, option_as_written, value);
 			return;
+		}
 	}
 }
 

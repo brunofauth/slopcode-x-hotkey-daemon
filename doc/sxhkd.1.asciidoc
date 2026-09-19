@@ -32,10 +32,10 @@ Every option has a short and a long form. Long options take their value as *--na
     Print the version information to standard output and exit.
 
 *-m*, *--mapping-count* _COUNT_::
-    Handle the first _COUNT_ mapping notify events.
+    Handle the first _COUNT_ mapping notify events. _COUNT_ is a non-negative integer, or _-1_ to handle all of them (default _0_).
 
 *-t*, *--timeout* _SECONDS_::
-    Timeout in seconds for the recording of chord chains.
+    Timeout in seconds for the recording of chord chains. _SECONDS_ is a non-negative integer; _0_ disables the timeout (default _3_).
 
 *-c*, *--config* _FILE_::
     Read the main configuration from the given file.
