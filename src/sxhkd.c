@@ -79,6 +79,8 @@ uint16_t num_lock;
 uint16_t caps_lock;
 uint16_t scroll_lock;
 
+static void install_signal_handler(int signal_number, void (*handler)(int));
+
 int main(int argc, char *argv[])
 {
 	status_fifo.kind = STATUS_FIFO_ABSENT;
@@ -134,12 +136,19 @@ int main(int argc, char *argv[])
 	if (options->status_fifo_path != NULL)
 		status_fifo = open_status_fifo(options->status_fifo_path);
 
-	signal(SIGINT, hold);
-	signal(SIGHUP, hold);
-	signal(SIGTERM, hold);
-	signal(SIGUSR1, hold);
-	signal(SIGUSR2, hold);
-	signal(SIGALRM, hold);
+	/* The flags are initialised before the handlers are installed and never
+	 * reset wholesale afterwards: a signal arriving during the rest of the
+	 * startup leaves its flag set for the first iteration of the main loop
+	 * (a terminating one makes the loop exit right away). */
+	reload = toggle_grab = bell = false;
+	running = true;
+
+	install_signal_handler(SIGINT, hold);
+	install_signal_handler(SIGHUP, hold);
+	install_signal_handler(SIGTERM, hold);
+	install_signal_handler(SIGUSR1, hold);
+	install_signal_handler(SIGUSR2, hold);
+	install_signal_handler(SIGALRM, hold);
 
 	setup();
 	indicator_init(&options->indicator, dpy, screen, screen_number);
@@ -156,9 +165,7 @@ int main(int argc, char *argv[])
 
 	fd_set descriptors;
 
-	reload = toggle_grab = bell = false;
 	chain_phase = CHAIN_PHASE_IDLE;
-	running = true;
 
 	/* The handled signals stay blocked while the loop body runs and are only
 	 * delivered inside pselect(), which installs the original mask atomically
@@ -217,19 +224,16 @@ int main(int argc, char *argv[])
 		}
 
 		if (reload) {
-			signal(SIGUSR1, hold);
 			reload_cmd();
 			reload = false;
 		}
 
 		if (toggle_grab) {
-			signal(SIGUSR2, hold);
 			toggle_grab_cmd();
 			toggle_grab = false;
 		}
 
 		if (bell) {
-			signal(SIGALRM, hold);
 			put_status(TIMEOUT_PREFIX, "Timeout reached");
 			abort_chain();
 			bell = false;
@@ -401,6 +405,21 @@ void hold(int sig)
 		toggle_grab = true;
 	else if (sig == SIGALRM)
 		bell = true;
+}
+
+/* signal() has System V semantics under _POSIX_C_SOURCE=200112L with glibc:
+ * the disposition resets to SIG_DFL on delivery and the signal is not blocked
+ * while the handler runs, so a second signal in quick succession would kill
+ * the daemon. sigaction() gives the persistent, reliable handler the main
+ * loop relies on. No SA_RESTART: the loop wants pselect() to return with
+ * EINTR so that the flags are examined promptly. */
+static void install_signal_handler(int signal_number, void (*handler)(int))
+{
+	struct sigaction action;
+	action.sa_handler = handler;
+	action.sa_flags = 0;
+	if (sigemptyset(&action.sa_mask) != 0 || sigaction(signal_number, &action, NULL) != 0)
+		err("Can't install the handler of signal %d: %s.\n", signal_number, strerror(errno));
 }
 
 /* Aborts startup because the status FIFO is unusable, removing it first if
