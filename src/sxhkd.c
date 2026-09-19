@@ -237,9 +237,23 @@ int main(int argc, char *argv[])
 		}
 
 		if (bell) {
-			put_status(TIMEOUT_PREFIX, "Timeout reached");
-			abort_chain();
 			bell = false;
+			/* alarm(0) cancels a timer that has not fired yet but not a
+			 * SIGALRM that is already pending, so the flag can be set after
+			 * the chain ended by other means (its last chord, the abort
+			 * keysym, a reload, a grab toggle). Reporting a timeout then
+			 * would emit spurious T and E messages and re-grab the bindings
+			 * right after a toggle released them. A locked chain never has
+			 * a timer running. */
+			switch (chain_phase) {
+				case CHAIN_PHASE_IDLE:
+				case CHAIN_PHASE_LOCKED:
+					break;
+				case CHAIN_PHASE_IN_PROGRESS:
+					put_status(TIMEOUT_PREFIX, "Timeout reached");
+					abort_chain();
+					break;
+			}
 		}
 
 		/* Every path that changes the recorder state (key events, timeout,
