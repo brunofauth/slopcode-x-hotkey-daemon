@@ -1,4 +1,4 @@
-# Maintainer: Bruno Fauth <brunovfauth@gmail.com>
+# Maintainer: Bruno Fauth
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgbase=sxhkd-git
 pkgname=('sxhkd-git' 'sxhkd-indicator-git')

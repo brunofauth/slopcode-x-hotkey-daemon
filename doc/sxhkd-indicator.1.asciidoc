@@ -83,7 +83,7 @@ See Also
 Author
 ------
 
-Bruno Fauth <brunovfauth at gmail.com>
+Bruno Fauth
 
 ////
 vim: set ft=asciidoc:

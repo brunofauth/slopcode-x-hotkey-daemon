@@ -1,16 +1,23 @@
 ## This Fork
 
-I forked sxhkd (simple X hotkey daemon) into sxhkd (SLOPCODE X hotkey daemon),
-a fork which adds a visual indicator for key chains. Think of it like Vim's
-mode indicator, that improved on Vi's raw mode modeing. This extension is now
-what it could have been from the start: a small separate binary,
-`sxhkd-indicator`, reading sxhkd's existing FIFO interface. That interface was
-so poorly documented that I only noticed it as a real option after already
-having forked the original project, so the indicator first lived inside the
-daemon; it has since moved out, and the daemon itself links nothing but xcb.
+`sxhkd`'s chains, manily the locked ones, kind-of behave like keybinding
+submodes, very reminiscent of vi/vim's modes. This app was forked off from
+upstream to implement a tool to show in-screen what "mode" we're currently on.
+That was needed after repeatedly running hotkeys I didn't want while trying to
+type text.
+
+Originally, the mode indicator had been built into `sxhkd` itself, but it grew
+kind-of too large and, because of that, I split it into a separate binary:
+`sxhkd-indicator`. That requried adding functionality to the FIFO interface
+though. This fork also adds better docs for that interface. 
+
+Other features are `--long-option-names`, lots of bug fixes, more correctness
+when handling signals, smaller UB/bug fixes, an Arch Linux PKGBUILD script,
+better Makefile support and a nix flake around everything, for reproducible dev
+environments and easier/more widely available packaging.
 
 
-## Description
+## `sxhkd`
 
 *sxhkd* is an X daemon that reacts to input events by executing commands.
 
@@ -18,57 +25,21 @@ Its configuration file is a series of bindings that define the associations
 between the input events and the commands.
 
 The format of the configuration file supports a simple notation for mapping
-multiple shortcuts to multiple commands in parallel.
+multiple shortcuts to multiple commands in parallel. It also supports keychord
+chains and locked keychord chains.
 
-Chord chains (`super + m ; h`) and locked chains (`super + n : {h,j,k,l}`) act
-like modes. `sxhkd-indicator` shows a small on-screen indicator listing the
-chords received so far while a chain is in progress, so that you always know
-which mode you are in. It reads the daemon's status FIFO, so the two are
-started together:
-
-	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
-	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
-
-Every option has a short and a long form; `sxhkd --help` and
-`sxhkd-indicator --help` list them all.
-
-
-### sxhkd-indicator
-
-The indicator is a program of its own: it learns what the daemon is doing from
-the status FIFO and never touches the daemon, so it can be started, stopped,
-restyled or replaced at will. Either side may start first: whichever finds no
-FIFO at the path creates it. The indicator waits for the daemon before opening
-the display, hides the banner when the daemon exits and waits for the next one,
-so it survives `sxhkd` restarts. `-i` anchors the banner (`top-right` by
-default), `-f` sets its font (a Pango description), `-F` and `-B` its text and
-background colors as `#rrggbb` or `#rrggbbaa`; translucency needs a compositing
-manager and a 32-bit visual (without the latter the colors are painted opaque).
-`-t` hides a chain shown in progress after that many seconds without a status
-line (default 3, 0 never), in case the line that ended it was lost.
-
-	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
-	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -i bottom -f "monospace 14" -F '#ffffff' -B '#222222c0' &
-
-A notification script (see the next section) reads a pipe of its own, through
-a second `-s` on the daemon, so that neither consumer steals the other's lines:
-
-	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -s "$XDG_RUNTIME_DIR/sxhkd-notify.fifo" &
-	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
-	examples/notification/sxhkd_notify "$XDG_RUNTIME_DIR/sxhkd-notify.fifo" &
-
-`sxhkd-indicator --help` and `sxhkd-indicator(1)` have the details.
+See `sxhkd --options` and `man 1 sxhkd` for more information.
 
 
 ## Status FIFO
 
-With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that
-a notification script or a status bar can show the chord chain in progress or
-react to the commands being run. *sxhkd* creates the pipe (owner-only) if it
-does not exist and removes it at exit in that case; an existing pipe is used and
-left alone, anything else at the path is a startup error. `-s` may be given
-several times (at most 8): every message goes to each pipe, so an indicator, a
-notification script and a status bar can each read their own.
+With the `-s`/`--status-fifo` options, *sxhkd* reports what it is doing to a
+named pipe, so that notification script, status bars or `sxhkd-indicator` can
+show the chord chain in progress or react to the commands being run.
+
+`sxhkd` creates the pipe (owner-only) if it does not exist and removes it at
+exit in that case; an existing pipe is used and left alone. `-s` may be given
+up to 8 times, so that the daemon can support notifying multiple consumers.
 
 	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
 
@@ -84,9 +55,9 @@ Each message is one line: a one-character prefix, then a text.
 | `T`    | the chord chain timed out    | `Timeout reached` (followed by an `E` line) |
 | `C`    | a command has been started   | the command                                 |
 
-This is version 2 of the protocol (`L` and `A` are new): a consumer must ignore
-the prefixes it does not know, and the existing prefixes keep their meaning and
-their relative order in later versions.
+This is version 2 of the protocol, an innovation of this branch. Messages `L`
+and `A` are new. For maximum compatibility, consumers should ignore the
+prefixes they do not know.
 
 Pressing `super + m` then `h` for the binding `super + m ; h` produces:
 
@@ -121,8 +92,30 @@ for the pipe, then reads it line by line and strips the prefix:
 	    esac
 	done < "$XDG_RUNTIME_DIR/sxhkd.fifo"
 
-See `examples/notification` for a complete setup, and the man page for the
+See `examples/notification` for a complete setup, and the `man` page for the
 details of when each message is sent.
+
+
+## sxhkd-indicator
+
+`sxhkd-indicator` shows a small on-screen indicator listing the chords received
+so far while a chain is in progress, so that you always know which keybinding
+"mode" you are in. It reads the daemon's status FIFO, so the two are started
+together:
+
+	sxhkd --status-fifo "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+	sxhkd-indicator --status-fifo "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+
+Either side may start first: whichever finds no FIFO at the path creates it.
+The indicator waits for the daemon before opening the display, hides the banner
+when the daemon exits and waits for the next one, so it survives `sxhkd`
+restarts. The look, position and font used by the indicator may be configured
+with CLI flags. Run `sxhkd-indicator --help` for more information.
+
+This indicator supports pango descriptions for fonts and translucency for its
+colors -- though that requires running a compositor alongside this app.
+
+`sxhkd-indicator --help` and `sxhkd-indicator(1)` have the details.
 
 
 ## Building
@@ -227,9 +220,13 @@ newer compiler does not break package builds; `make analyze` always uses it.
 - [sxhkd-mode](https://github.com/xFA25E/sxhkd-mode)
 - [sxhkdrc-mode](https://github.com/protesilaos/sxhkdrc-mode)
 
+
 ## License
 
-This fork is distributed under the GNU General Public License, version 3 or (at your option) any later version; see `LICENSE`. The original sxhkd code by Bastien Dejean is licensed under the BSD 2-Clause license, reproduced in `LICENSE.BSD-2-Clause` and in the headers of his files.
+This fork is distributed under the GNU General Public License, version 3 or (at
+your option) any later version; see `LICENSE`. The original sxhkd code by
+Bastien Dejean is licensed under the BSD 2-Clause license, reproduced in
+`LICENSE.BSD-2-Clause` and in the headers of his files.
 
 ----
 
