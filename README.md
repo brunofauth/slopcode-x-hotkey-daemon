@@ -36,7 +36,9 @@ With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that
 a notification script or a status bar can show the chord chain in progress or
 react to the commands being run. *sxhkd* creates the pipe (owner-only) if it
 does not exist and removes it at exit in that case; an existing pipe is used and
-left alone, anything else at the path is a startup error:
+left alone, anything else at the path is a startup error. `-s` may be given
+several times (at most 8): every message goes to each pipe, so an indicator, a
+notification script and a status bar can each read their own.
 
 	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
 

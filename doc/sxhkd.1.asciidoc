@@ -44,7 +44,7 @@ Every option has a short and a long form. Long options take their value as *--na
     Redirect the commands output to the given file.
 
 *-s*, *--status-fifo* _PATH_::
-    Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO is created if it does not exist.
+    Output status information to the given FIFO (see the _Status FIFO_ section). The FIFO is created if it does not exist. May be given several times, each with a different _PATH_: every message is written to each FIFO.
 
 *-a*, *--abort-keysym* _KEYSYM_::
     Name of the keysym used for aborting chord chains (default _Escape_). It must have a keycode in the current keymap, otherwise *sxhkd* refuses to start.
@@ -92,6 +92,8 @@ Status FIFO
 With the *-s* option, *sxhkd* reports what it is doing to a named pipe, so that an external program (a notification script, a status bar, …) can display the chord chain in progress or react to the commands being run.
 
 *sxhkd* creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place. Anything else at the path, or a pipe that cannot be created or opened, is a startup error. *sxhkd* opens the pipe for reading and writing in non-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards. The commands *sxhkd* runs do not inherit the pipe, so a reader sees end-of-file once *sxhkd* exits.
+
+A named pipe carries a single stream, so *-s* may be given several times, with at most 8 distinct paths: every message is written to each pipe, and several consumers (an indicator, a notification script, a status bar) read independently, each pipe keeping and dropping messages on its own.
 
 Each message is a single line made of a one-character prefix followed by a text:
 

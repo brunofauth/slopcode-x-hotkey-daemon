@@ -153,8 +153,8 @@ static void test_derive_banner(void)
 	CHECK(banner.kind == INDICATOR_BANNER_PRESENT);
 	CHECK(strcmp(banner.text, " ;") == 0);
 
-	/* The longest possible progress string: 3 * MAXLEN - 1 bytes of "a;a;...;a". */
-	static char longest_progress[3 * MAXLEN];
+	/* The longest possible progress string: CHAIN_PROGRESS_CAPACITY - 1 bytes of "a;a;...;a". */
+	static char longest_progress[CHAIN_PROGRESS_CAPACITY];
 	const size_t longest_progress_length = sizeof(longest_progress) - 1;
 	for (size_t index = 0; index < longest_progress_length; index++)
 		longest_progress[index] = (index % 2 == 0) ? 'a' : CHAIN_PROGRESS_SEPARATOR;

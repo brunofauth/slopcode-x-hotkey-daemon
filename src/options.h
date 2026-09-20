@@ -33,13 +33,17 @@
 
 #define DEFAULT_CHAIN_TIMEOUT_IN_SECONDS 3
 #define DEFAULT_MAPPING_COUNT            0
+/* How many -s options a command line may carry: one FIFO per consumer. */
+#define MAX_STATUS_FIFOS                 8
 
 typedef struct {
 	int mapping_count;
 	int timeout_in_seconds;
 	const char *config_path;          /* NULL: the default location */
 	const char *redirect_path;        /* NULL: no redirection */
-	const char *status_fifo_path;     /* NULL: no status FIFO */
+	/* The -s values in order, no two equal; 0 of them: no status FIFO. */
+	const char *status_fifo_paths[MAX_STATUS_FIFOS];
+	int status_fifo_count;
 	const char *abort_keysym_name;    /* NULL: the default keysym */
 	indicator_settings_t indicator;   /* disabled unless --indicator was given */
 	/* --indicator-font/-foreground/-background were given but --indicator was not. */

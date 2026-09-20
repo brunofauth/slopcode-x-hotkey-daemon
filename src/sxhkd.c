@@ -61,8 +61,9 @@ char config_file[MAXLEN];
 char **extra_confs;
 int num_extra_confs;
 int redir_fd;
-status_fifo_t status_fifo;
-char progress[3 * MAXLEN];
+status_fifo_t status_fifos[MAX_STATUS_FIFOS];
+int status_fifo_count;
+char progress[CHAIN_PROGRESS_CAPACITY];
 int mapping_count;
 int timeout;
 
@@ -84,7 +85,7 @@ static void install_signal_handler(int signal_number, void (*handler)(int));
 
 int main(int argc, char *argv[])
 {
-	status_fifo.kind = STATUS_FIFO_ABSENT;
+	status_fifo_count = 0;
 	grabbed = false;
 	redir_fd = -1;
 	abort_keysym = ESCAPE_KEYSYM;
@@ -135,8 +136,10 @@ int main(int argc, char *argv[])
 		snprintf(config_file, sizeof(config_file), "%s", options->config_path);
 	}
 
-	if (options->status_fifo_path != NULL)
-		status_fifo = open_status_fifo(options->status_fifo_path);
+	for (int index = 0; index < options->status_fifo_count; index++) {
+		status_fifos[status_fifo_count] = open_status_fifo(options->status_fifo_paths[index]);
+		status_fifo_count++;
+	}
 
 	/* The flags are initialised before the handlers are installed and never
 	 * reset wholesale afterwards: a signal arriving during the rest of the
@@ -278,7 +281,7 @@ int main(int argc, char *argv[])
 		close(redir_fd);
 	}
 
-	close_status_fifo();
+	close_status_fifos();
 
 	ungrab();
 	indicator_shutdown();
@@ -461,15 +464,29 @@ static void install_signal_handler(int signal_number, void (*handler)(int))
 		err("Can't install the handler of signal %d: %s.\n", signal_number, strerror(errno));
 }
 
-/* Aborts startup because the status FIFO is unusable, removing it first if
- * this run created it. There is deliberately no atexit() handler for the
- * removal: spawn()'s children leave through _exit() precisely so that no
- * such handler could run in them and remove the FIFO under the running
- * daemon, and that must stay true. As a consequence a fatal error later in
- * startup leaves a created FIFO behind, which the next run reuses. */
-static void fail_status_fifo(const char *fifo_path, status_fifo_ownership_t ownership, const char *problem)
+/* Closes one status FIFO and removes it if this run created it. */
+static void discard_status_fifo(const status_fifo_t *fifo)
 {
-	const int saved_errno = errno;
+	fclose(fifo->stream);
+	switch (fifo->ownership) {
+		case STATUS_FIFO_INHERITED:
+			break;
+		case STATUS_FIFO_CREATED:
+			unlink(fifo->path);
+			break;
+	}
+}
+
+/* Undoes what this run did to the status FIFOs before a startup error:
+ * removes the FIFO being opened if this run created it, then closes the
+ * FIFOs opened so far and removes those this run created, so that a failed
+ * start leaves nothing behind. There is deliberately no atexit() handler for
+ * the removal: spawn()'s children leave through _exit() precisely so that no
+ * such handler could run in them and remove the FIFOs under the running
+ * daemon, and that must stay true. As a consequence a fatal error later in
+ * startup leaves the created FIFOs behind, which the next run reuses. */
+static void abandon_status_fifos(const char *fifo_path, status_fifo_ownership_t ownership)
+{
 	switch (ownership) {
 		case STATUS_FIFO_INHERITED:
 			break;
@@ -477,12 +494,22 @@ static void fail_status_fifo(const char *fifo_path, status_fifo_ownership_t owne
 			unlink(fifo_path);
 			break;
 	}
+	close_status_fifos();
+}
+
+/* Aborts startup because the status FIFO at `fifo_path` is unusable, errno
+ * telling why. */
+static void fail_status_fifo(const char *fifo_path, status_fifo_ownership_t ownership, const char *problem)
+{
+	const int saved_errno = errno;
+	abandon_status_fifos(fifo_path, ownership);
 	err("%s the status fifo '%s': %s.\n", problem, fifo_path, strerror(saved_errno));
 }
 
 /* Creates the FIFO if nothing exists at the path, opens it and verifies that
  * what was opened really is a FIFO (on the descriptor, so that the check
- * cannot be raced). A pre-existing FIFO is used as-is and left in place. */
+ * cannot be raced). A pre-existing FIFO is used as-is and left in place. On
+ * failure the FIFOs opened so far are abandoned (see above). */
 status_fifo_t open_status_fifo(const char *fifo_path)
 {
 	status_fifo_ownership_t ownership = STATUS_FIFO_INHERITED;
@@ -506,14 +533,7 @@ status_fifo_t open_status_fifo(const char *fifo_path)
 	if (fstat(fifo_fd, &fifo_status) != 0)
 		fail_status_fifo(fifo_path, ownership, "Can't inspect");
 	if (!S_ISFIFO(fifo_status.st_mode)) {
-		errno = 0;
-		switch (ownership) {
-			case STATUS_FIFO_INHERITED:
-				break;
-			case STATUS_FIFO_CREATED:
-				unlink(fifo_path);
-				break;
-		}
+		abandon_status_fifos(fifo_path, ownership);
 		err("The status fifo path '%s' is not a fifo.\n", fifo_path);
 	}
 
@@ -522,40 +542,28 @@ status_fifo_t open_status_fifo(const char *fifo_path)
 		fail_status_fifo(fifo_path, ownership, "Can't open");
 
 	status_fifo_t opened;
-	opened.kind = STATUS_FIFO_PRESENT;
-	opened.as.present.stream = stream;
-	opened.as.present.ownership = ownership;
-	opened.as.present.path = fifo_path;
+	opened.stream = stream;
+	opened.ownership = ownership;
+	opened.path = fifo_path;
 	return opened;
 }
 
-void close_status_fifo(void)
+/* Closes every status FIFO, in the order they were given, removing those
+ * this run created. */
+void close_status_fifos(void)
 {
-	switch (status_fifo.kind) {
-		case STATUS_FIFO_ABSENT:
-			return;
-		case STATUS_FIFO_PRESENT:
-			break;
-	}
-	fclose(status_fifo.as.present.stream);
-	switch (status_fifo.as.present.ownership) {
-		case STATUS_FIFO_INHERITED:
-			break;
-		case STATUS_FIFO_CREATED:
-			unlink(status_fifo.as.present.path);
-			break;
-	}
-	status_fifo.kind = STATUS_FIFO_ABSENT;
+	for (int index = 0; index < status_fifo_count; index++)
+		discard_status_fifo(&status_fifos[index]);
+	status_fifo_count = 0;
 }
 
-void put_status(char c, const char *s)
+/* Writes one message to every status FIFO. Each pipe is non-blocking and
+ * keeps or drops the line on its own: a full one does not hold up the
+ * others. */
+void put_status(char prefix, const char *text)
 {
-	switch (status_fifo.kind) {
-		case STATUS_FIFO_ABSENT:
-			return;
-		case STATUS_FIFO_PRESENT:
-			break;
+	for (int index = 0; index < status_fifo_count; index++) {
+		fprintf(status_fifos[index].stream, "%c%s\n", prefix, text);
+		fflush(status_fifos[index].stream);
 	}
-	fprintf(status_fifo.as.present.stream, "%c%s\n", c, s);
-	fflush(status_fifo.as.present.stream);
 }

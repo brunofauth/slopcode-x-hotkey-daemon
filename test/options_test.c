@@ -58,7 +58,8 @@ static void test_defaults(void)
 	const run_options_t *run = &command_line.as.run;
 	CHECK(run->mapping_count == 0);
 	CHECK(run->timeout_in_seconds == 3);
-	CHECK(run->config_path == NULL && run->redirect_path == NULL && run->status_fifo_path == NULL && run->abort_keysym_name == NULL);
+	CHECK(run->config_path == NULL && run->redirect_path == NULL && run->abort_keysym_name == NULL);
+	CHECK(run->status_fifo_count == 0);
 	CHECK(run->indicator.kind == INDICATOR_SETTINGS_DISABLED);
 	CHECK(!run->indicator_look_given_without_position);
 	CHECK(run->extra_config_count == 0);
@@ -128,8 +129,40 @@ static void test_paths_and_keysym(void)
 	CHECK(command_line.kind == COMMAND_LINE_RUN);
 	CHECK(strcmp(command_line.as.run.config_path, "a") == 0);
 	CHECK(strcmp(command_line.as.run.redirect_path, "b") == 0);
-	CHECK(strcmp(command_line.as.run.status_fifo_path, "c") == 0);
+	CHECK(command_line.as.run.status_fifo_count == 1 && strcmp(command_line.as.run.status_fifo_paths[0], "c") == 0);
 	CHECK(strcmp(command_line.as.run.abort_keysym_name, "q") == 0);
+}
+
+/* -s may be repeated, up to MAX_STATUS_FIFOS distinct paths, kept in order. */
+static void test_status_fifos(void)
+{
+	command_line_t command_line = PARSE("-s", "one");
+	CHECK(command_line.kind == COMMAND_LINE_RUN);
+	CHECK(command_line.as.run.status_fifo_count == 1 && strcmp(command_line.as.run.status_fifo_paths[0], "one") == 0);
+
+	command_line = PARSE("-s", "one", "-s", "two");
+	CHECK(command_line.kind == COMMAND_LINE_RUN && command_line.as.run.status_fifo_count == 2);
+	CHECK(strcmp(command_line.as.run.status_fifo_paths[0], "one") == 0);
+	CHECK(strcmp(command_line.as.run.status_fifo_paths[1], "two") == 0);
+
+	command_line = PARSE("--status-fifo=one", "-t", "5", "-s", "two", "--status-fifo", "three");
+	CHECK(command_line.kind == COMMAND_LINE_RUN && command_line.as.run.status_fifo_count == 3);
+	CHECK(strcmp(command_line.as.run.status_fifo_paths[0], "one") == 0);
+	CHECK(strcmp(command_line.as.run.status_fifo_paths[1], "two") == 0);
+	CHECK(strcmp(command_line.as.run.status_fifo_paths[2], "three") == 0);
+	CHECK(command_line.as.run.timeout_in_seconds == 5);
+
+	/* A duplicate is reported against the option that repeated it. */
+	CHECK(message_contains(PARSE("-s", "one", "-s", "one"), "invalid value 'one' for -s: given twice"));
+	CHECK(message_contains(PARSE("-s", "one", "--status-fifo=one"), "invalid value 'one' for --status-fifo: given twice"));
+	CHECK(PARSE("-s", "one", "-s", "one/").kind == COMMAND_LINE_RUN);   /* textual comparison only */
+
+	command_line = PARSE("-s", "f1", "-s", "f2", "-s", "f3", "-s", "f4", "-s", "f5", "-s", "f6", "-s", "f7", "-s", "f8");
+	CHECK(command_line.kind == COMMAND_LINE_RUN && command_line.as.run.status_fifo_count == MAX_STATUS_FIFOS);
+	CHECK(strcmp(command_line.as.run.status_fifo_paths[MAX_STATUS_FIFOS - 1], "f8") == 0);
+
+	command_line = PARSE("-s", "f1", "-s", "f2", "-s", "f3", "-s", "f4", "-s", "f5", "-s", "f6", "-s", "f7", "-s", "f8", "-s", "f9");
+	CHECK(message_contains(command_line, "too many status FIFOs (at most 8)"));
 }
 
 /* An empty value is rejected for every valued option, in one place, before
@@ -253,6 +286,7 @@ int main(void)
 	test_mapping_count();
 	test_extra_configs();
 	test_paths_and_keysym();
+	test_status_fifos();
 	test_empty_values();
 	test_indicator();
 	test_print_usage();

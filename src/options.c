@@ -56,7 +56,7 @@ static const cli_option_spec_t option_specs[] = {
 	CLI_VALUED('r', "redirect", VALUED_REDIRECT, "FILE",
 		"Redirect the output of the commands to FILE."),
 	CLI_VALUED('s', "status-fifo", VALUED_STATUS_FIFO, "PATH",
-		"Report status lines to the FIFO at PATH, created if absent."),
+		"Report status lines to the FIFO at PATH, created if absent (repeatable)."),
 	CLI_VALUED('a', "abort-keysym", VALUED_ABORT_KEYSYM, "KEYSYM",
 		"Keysym that aborts a chord chain (default Escape)."),
 	CLI_VALUED('i', "indicator", VALUED_INDICATOR, "POSITION",
@@ -98,6 +98,21 @@ static cli_apply_result_t invalid_value(cli_error_t *error, const char *value, c
 	return cli_apply_invalid(error, "invalid value '%s' for %s: expected %s", value, option_as_written, expectation);
 }
 
+/* Each -s adds a FIFO; the same path twice would receive every line twice,
+ * so it is a mistake rather than a no-op. */
+static cli_apply_result_t add_status_fifo_path(run_options_t *run_options, const char *value, const char *option_as_written, cli_error_t *error)
+{
+	for (int index = 0; index < run_options->status_fifo_count; index++) {
+		if (strcmp(run_options->status_fifo_paths[index], value) == 0)
+			return cli_apply_invalid(error, "invalid value '%s' for %s: given twice", value, option_as_written);
+	}
+	if (run_options->status_fifo_count == MAX_STATUS_FIFOS)
+		return cli_apply_invalid(error, "too many status FIFOs (at most %d)", MAX_STATUS_FIFOS);
+	run_options->status_fifo_paths[run_options->status_fifo_count] = value;
+	run_options->status_fifo_count++;
+	return CLI_APPLY_CONTINUE;
+}
+
 static cli_apply_result_t apply_flag(int flag_id, const char *option_as_written, void *state, cli_error_t *error)
 {
 	(void) option_as_written;
@@ -136,7 +151,7 @@ static cli_apply_result_t apply_valued(int valued_id, const char *option_as_writ
 			run_options->redirect_path = value;
 			break;
 		case VALUED_STATUS_FIFO:
-			run_options->status_fifo_path = value;
+			result = add_status_fifo_path(run_options, value, option_as_written, error);
 			break;
 		case VALUED_ABORT_KEYSYM:
 			run_options->abort_keysym_name = value;
@@ -181,7 +196,7 @@ static bool initialize_parser_state(parser_state_t *state, cli_error_t *error)
 	run_options->timeout_in_seconds = DEFAULT_CHAIN_TIMEOUT_IN_SECONDS;
 	run_options->config_path = NULL;
 	run_options->redirect_path = NULL;
-	run_options->status_fifo_path = NULL;
+	run_options->status_fifo_count = 0;
 	run_options->abort_keysym_name = NULL;
 	run_options->indicator.kind = INDICATOR_SETTINGS_DISABLED;
 	run_options->indicator_look_given_without_position = false;

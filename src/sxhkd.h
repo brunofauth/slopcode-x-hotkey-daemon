@@ -39,6 +39,7 @@
 #include <signal.h>
 #include "types.h"
 #include "helpers.h"
+#include "options.h"
 
 #define CONFIG_HOME_ENV     "XDG_CONFIG_HOME"
 #define SXHKD_SHELL_ENV     "SXHKD_SHELL"
@@ -69,28 +70,23 @@ extern char **extra_confs;
 extern int num_extra_confs;
 extern int redir_fd;
 typedef enum {
-	STATUS_FIFO_ABSENT,    /* -s not given */
-	STATUS_FIFO_PRESENT
-} status_fifo_kind_t;
-
-typedef enum {
 	STATUS_FIFO_INHERITED, /* the FIFO existed already: left in place at exit */
 	STATUS_FIFO_CREATED    /* created by sxhkd: removed at exit */
 } status_fifo_ownership_t;
 
+/* One open status FIFO. */
 typedef struct {
-	status_fifo_kind_t kind;
-	union {
-		struct {
-			FILE *stream;
-			status_fifo_ownership_t ownership;
-			const char *path;   /* points into argv[]: process lifetime */
-		} present;
-	} as;
+	FILE *stream;
+	status_fifo_ownership_t ownership;
+	const char *path;   /* points into argv[]: process lifetime */
 } status_fifo_t;
 
-extern status_fifo_t status_fifo;
-extern char progress[3 * MAXLEN];
+/* The status FIFOs given with -s, in order: every message goes to each of
+ * them. Exactly the first status_fifo_count elements are open; 0: -s was
+ * not given. */
+extern status_fifo_t status_fifos[MAX_STATUS_FIFOS];
+extern int status_fifo_count;
+extern char progress[CHAIN_PROGRESS_CAPACITY];
 extern int mapping_count;
 extern int timeout;
 
@@ -120,7 +116,7 @@ void reload_cmd(void);
 void toggle_grab_cmd(void);
 void hold(int sig);
 status_fifo_t open_status_fifo(const char *fifo_path);
-void close_status_fifo(void);
-void put_status(char c, const char *s);
+void close_status_fifos(void);
+void put_status(char prefix, const char *text);
 
 #endif
