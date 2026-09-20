@@ -139,13 +139,13 @@ typedef struct {
  * arrives; the persistent handler guarantees that a second one does. */
 static fifo_open_result_t open_status_fifo_for_reading(const char *fifo_path)
 {
-	fifo_open_result_t result;
+	/* Each result is built whole at its return: a stopped result has no
+	 * descriptor, and a struct that exists before its kind is known would
+	 * carry the unset union member through the copy out of the function. */
 	int fifo_fd = -1;
 	while (fifo_fd == -1) {
-		if (!running) {
-			result.kind = FIFO_OPEN_STOPPED;
-			return result;
-		}
+		if (!running)
+			return (fifo_open_result_t){.kind = FIFO_OPEN_STOPPED};
 		fifo_fd = open(fifo_path, O_RDONLY);
 		if (fifo_fd == -1 && errno != EINTR)
 			err("Can't open the status fifo '%s': %s.\n", fifo_path, strerror(errno));
@@ -167,9 +167,7 @@ static fifo_open_result_t open_status_fifo_for_reading(const char *fifo_path)
 	if (fcntl(fifo_fd, F_SETFD, FD_CLOEXEC) == -1)
 		err("Can't set close-on-exec on the status fifo '%s': %s.\n", fifo_path, strerror(errno));
 
-	result.kind = FIFO_OPEN_SUCCEEDED;
-	result.as.succeeded.descriptor = fifo_fd;
-	return result;
+	return (fifo_open_result_t){.kind = FIFO_OPEN_SUCCEEDED, .as.succeeded.descriptor = fifo_fd};
 }
 
 /* The X connection and the screen the banner goes on: the few lines of the
