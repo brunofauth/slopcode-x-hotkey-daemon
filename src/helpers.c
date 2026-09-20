@@ -33,7 +33,6 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -43,24 +42,6 @@
 #include "sxhkd.h"
 
 static void wait_for_child(pid_t child_pid);
-
-void warn(char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
-}
-
-__attribute__((noreturn))
-void err(char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	exit(EXIT_FAILURE);
-}
 
 void run(char *command, bool sync)
 {

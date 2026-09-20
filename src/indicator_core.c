@@ -35,7 +35,7 @@ const indicator_position_name_t indicator_position_names[] = {
 	{"bottom-left", INDICATOR_POSITION_BOTTOM_LEFT},
 	{"bottom-right", INDICATOR_POSITION_BOTTOM_RIGHT},
 };
-const size_t indicator_position_name_count = LENGTH(indicator_position_names);
+const size_t indicator_position_name_count = sizeof(indicator_position_names) / sizeof(indicator_position_names[0]);
 
 bool indicator_parse_position(const char *position_text, indicator_position_t *parsed_position)
 {

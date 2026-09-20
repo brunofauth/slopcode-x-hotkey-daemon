@@ -21,19 +21,35 @@
 #ifndef SXHKD_CHAIN_PHASE_H
 #define SXHKD_CHAIN_PHASE_H
 
+/* What the chord-chain recorder and the chain indicator share: the phase
+ * enumeration and the shape of the chain progress string.
+ *
+ * This header is deliberately free of X and libc includes so that modules
+ * which must stay headless-testable, and the indicator binary, can include
+ * it. */
+
+/* The capacity of the fixed-size text buffers of the configuration parser: a
+ * chord text, a keysym name, a token. Larger items fit in a small multiple of
+ * it. Defined here rather than in helpers.h because CHAIN_PROGRESS_CAPACITY
+ * below derives from it. */
+#define MAXLEN                   256
+
 /* The character placed between chord texts when the chain progress string is
  * joined. It is the ';' link separator of the configuration syntax, which can
  * therefore never occur inside a single chord's text. */
 #define CHAIN_PROGRESS_SEPARATOR ';'
 
+/* The size, NUL included, of the buffer holding the chain progress string:
+ * the chord texts received so far, each at most MAXLEN - 1 bytes, joined by
+ * CHAIN_PROGRESS_SEPARATOR. The recorder appends with truncation, so a
+ * longer chain is cut off rather than overflowing. */
+#define CHAIN_PROGRESS_CAPACITY  (3 * MAXLEN)
+
 /* The phase of the chord-chain recorder. Exactly one phase holds at any time.
  *
  * This replaces the former pair of booleans `chained` and `locked`, under which
  * the combination "locked but not chained" was representable yet meaningless
- * (and reachable through a cycle hotkey whose tail chord carried a lock mark).
- *
- * This header is deliberately free of X and libc includes so that modules
- * which must stay headless-testable can include it. */
+ * (and reachable through a cycle hotkey whose tail chord carried a lock mark). */
 typedef enum {
 	/* No chain is in progress: every chain sits at its head chord, no alarm
 	 * is armed and the abort chord is not grabbed. A hotkey that fully

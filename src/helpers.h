@@ -33,8 +33,14 @@
 #ifndef SXHKD_HELPERS_H
 #define SXHKD_HELPERS_H
 
+/* MAXLEN lives in chain_phase.h, warn() and err() in diagnostics.h: both are
+ * shared with the chain indicator, which cannot link this module (it refers
+ * to daemon state). They are included here so that every includer keeps
+ * seeing them. */
+#include "chain_phase.h"
+#include "diagnostics.h"
+
 #define LENGTH(x)         (sizeof(x) / sizeof(*x))
-#define MAXLEN            256
 
 #ifdef DEBUG
 #  define PUTS(x)         puts(x)
@@ -44,10 +50,6 @@
 #  define PRINTF(x,...)   ((void)0)
 #endif
 
-__attribute__((format(printf, 1, 2)))
-void warn(char *fmt, ...);
-__attribute__((noreturn, format(printf, 1, 2)))
-void err(char *fmt, ...);
 /* Runs only in a forked child: execs the command or leaves through _exit(). */
 __attribute__((noreturn))
 void execute(char *cmd[]);

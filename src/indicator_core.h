@@ -30,8 +30,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "helpers.h"
 #include "chain_phase.h"
+/* For the modules built on this core: this one reports nothing itself. */
+#include "diagnostics.h"
 
 #define INDICATOR_DEFAULT_FONT_DESCRIPTION  "monospace 14"
 #define INDICATOR_DEFAULT_FOREGROUND_COLOR  "#ffffff"
@@ -39,11 +40,13 @@
 #define INDICATOR_MARGIN_IN_PIXELS          16
 #define INDICATOR_PADDING_IN_PIXELS         8
 
-/* The chain progress string holds at most 3 * MAXLEN - 1 = 767 bytes and thus
- * at most 383 separators. Rendering expands each separator to " ; " (+2 bytes
- * each), appends a 2-byte pending-chord marker and a NUL:
- * 767 + 2 * 383 + 2 + 1 = 1536 <= 2304. The writer is bounded regardless. */
-#define INDICATOR_TEXT_CAPACITY             (3 * (3 * MAXLEN))
+/* The chain progress string holds at most CHAIN_PROGRESS_CAPACITY - 1 bytes.
+ * Rendering keeps every byte or trims it, except each separator, which it
+ * expands to " ; " (+2 bytes), then appends a 2-byte pending-chord marker and
+ * a NUL. The worst case is a string made only of separators (chord texts may
+ * be empty): 3 * (CHAIN_PROGRESS_CAPACITY - 1) + 2 + 1 = 3 * CHAIN_PROGRESS_CAPACITY,
+ * which this capacity holds exactly. The writer is bounded regardless. */
+#define INDICATOR_TEXT_CAPACITY             (3 * CHAIN_PROGRESS_CAPACITY)
 
 typedef enum {
 	INDICATOR_POSITION_TOP,

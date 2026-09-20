@@ -56,7 +56,7 @@ $(OBJ): Makefile | check-indicator-deps
 
 $(OUT): $(OBJ)
 
-indicator_core.o indicator.o options.o: override CFLAGS += $(STRICT_CFLAGS)
+diagnostics.o indicator_core.o indicator.o options.o: override CFLAGS += $(STRICT_CFLAGS)
 
 check-indicator-deps:
 	@$(PKG_CONFIG) --exists $(INDICATOR_PKGS) || { \
@@ -64,7 +64,7 @@ check-indicator-deps:
 		exit 1; \
 	}
 
-ANALYZE_SRC = src/indicator_core.c src/indicator.c src/options.c
+ANALYZE_SRC = src/diagnostics.c src/indicator_core.c src/indicator.c src/options.c
 
 analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator and option sources
 	for source in $(ANALYZE_SRC); do \
@@ -85,10 +85,10 @@ check: $(TEST_BINS) ## Build and run the unit tests (TEST_CFLAGS, WERROR=-Werror
 	./test/indicator_core_test
 	./test/options_test
 
-test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
+test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/indicator_core_test.c src/indicator_core.c
 
-test/options_test: test/options_test.c src/options.c src/options.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/helpers.h
+test/options_test: test/options_test.c src/options.c src/options.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h src/helpers.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/indicator_core.c
 
 install: ## Install the program, man page and examples under PREFIX
