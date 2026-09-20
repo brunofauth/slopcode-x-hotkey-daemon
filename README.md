@@ -46,9 +46,15 @@ Each message is one line: a one-character prefix, then a text.
 |--------|------------------------------|---------------------------------------------|
 | `H`    | a chord was received         | the chords received so far, `;`-separated   |
 | `B`    | a chord chain has begun      | `Begin chain`                               |
+| `L`    | the chord chain was locked   | `Chain locked` (after the `H` of the `:` chord) |
+| `A`    | the abort keysym ended it    | `Chain aborted` (followed by an `E` line)   |
 | `E`    | the chord chain has ended    | `End chain`                                 |
 | `T`    | the chord chain timed out    | `Timeout reached` (followed by an `E` line) |
 | `C`    | a command has been started   | the command                                 |
+
+This is version 2 of the protocol (`L` and `A` are new): a consumer must ignore
+the prefixes it does not know, and the existing prefixes keep their meaning and
+their relative order in later versions.
 
 Pressing `super + m` then `h` for the binding `super + m ; h` produces:
 
@@ -58,6 +64,17 @@ Pressing `super + m` then `h` for the binding `super + m ; h` produces:
 	EEnd chain
 	Cecho H
 
+For the locked binding `super + m : h`, pressing `super + m`, `h`, then
+`Escape` produces:
+
+	Hsuper + m
+	BBegin chain
+	LChain locked
+	Hsuper + m;h
+	Cecho H
+	AChain aborted
+	EEnd chain
+
 A single-chord binding only produces its `H` and `C` lines. A consumer waits
 for the pipe, then reads it line by line and strips the prefix:
 
@@ -66,6 +83,8 @@ for the pipe, then reads it line by line and strips the prefix:
 	    case $line in
 	        H*) notify-send -t 2000 "sxhkd" "${line#?}" ;;
 	        C*) notify-send -t 4000 "sxhkd" "Running: ${line#?}" ;;
+	        L*) notify-send -t 2000 "sxhkd" "Chain locked" ;;
+	        A*) notify-send -t 1000 "sxhkd" "Chain aborted" ;;
 	        T*) notify-send -t 1000 "sxhkd" "Chain timed out" ;;
 	    esac
 	done < "$XDG_RUNTIME_DIR/sxhkd.fifo"

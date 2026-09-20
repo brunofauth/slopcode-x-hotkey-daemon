@@ -16,6 +16,12 @@ until [ -p "$status_fifo" ] ; do sleep 0.1 ; done
         C*)
             duration=4000
             ;;
+        L*)
+            duration=2000
+            ;;
+        A*)
+            duration=1000
+            ;;
         T*)
             duration=1000
             ;;

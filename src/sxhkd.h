@@ -44,11 +44,18 @@
 #define SXHKD_SHELL_ENV     "SXHKD_SHELL"
 #define SHELL_ENV           "SHELL"
 #define CONFIG_PATH         "sxhkd/sxhkdrc"
-#define HOTKEY_PREFIX       'H'
-#define COMMAND_PREFIX      'C'
-#define BEGIN_CHAIN_PREFIX  'B'
-#define END_CHAIN_PREFIX    'E'
-#define TIMEOUT_PREFIX      'T'
+/* Status FIFO protocol, version 2: one line per message, a one-character
+ * prefix followed by a text (see the "Status FIFO" section of the man page).
+ * Prefixes are never reused with another meaning and their relative order
+ * never changes; a consumer must ignore the prefixes it does not know, so that
+ * later versions can add some. */
+#define HOTKEY_PREFIX        'H' /* the chords received so far */
+#define COMMAND_PREFIX       'C' /* a command was started: its text */
+#define BEGIN_CHAIN_PREFIX   'B' /* "Begin chain": after the H of a chain's first chord */
+#define END_CHAIN_PREFIX     'E' /* "End chain": the chain ended, whatever the cause */
+#define TIMEOUT_PREFIX       'T' /* "Timeout reached": before the E of a timed-out chain */
+#define LOCKED_CHAIN_PREFIX  'L' /* "Chain locked": the chain entered the locked phase (version 2) */
+#define ABORTED_CHAIN_PREFIX 'A' /* "Chain aborted": before the E of a chain ended by the abort keysym (version 2) */
 
 extern xcb_connection_t *dpy;
 extern xcb_screen_t *screen;

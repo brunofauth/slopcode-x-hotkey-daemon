@@ -99,6 +99,8 @@ Each message is a single line made of a one-character prefix followed by a text:
 PREFIX  WHEN                                        TEXT
 H       a chord was received                        the chords received so far
 B       a chord chain has begun                     Begin chain
+L       the chord chain has been locked             Chain locked
+A       the abort keysym ended the chord chain      Chain aborted
 E       the chord chain has ended                   End chain
 T       the chord chain timed out                   Timeout reached
 C       a command has been started                  the command
@@ -106,7 +108,14 @@ C       a command has been started                  the command
 
 The text of an _H_ message is the list of the chords received since the chain began, separated by semicolons, each one written as in the configuration file (modifiers, *~* and *@* included). Every chord that matches a hotkey produces an _H_ message, including the only chord of a single-chord hotkey. In a locked chain, every chord received after the lock produces an _H_ message made of the locked prefix and that chord; the prefix itself never grows.
 
-_B_ is sent after the _H_ message of the first chord of a chain, and _E_ is sent whenever the chain ends: after its last chord, when the abort keysym is pressed, when the timeout is reached (in which case a _T_ message precedes it), or when *sxhkd* reloads its configuration or ungrabs its bindings while a chain is in progress. _C_ is sent after the command has been started, and after the _E_ message when the command ends a chain.
+_B_ is sent after the _H_ message of the first chord of a chain, and _E_ is sent whenever the chain ends: after its last chord, when the abort keysym is pressed, when the timeout is reached (in which case a _T_ message precedes it), when the chord received matches no chain, or when *sxhkd* reloads its configuration or ungrabs its bindings while a chain is in progress. _C_ is sent after the command has been started, and after the _E_ message when the command ends a chain.
+
+_L_ is sent once per chain, right after the _H_ message of the chord that is followed by *:* in the configuration (after the _B_ message when that chord is the first one of the chain); the chain is locked from then on and no further _L_ is sent for it, whichever chords it receives. _A_ is sent right before the _E_ message when the abort keysym ended the chain, whether the chain was locked or not; pressing the abort keysym produces no _H_ message of its own, since it is not a chord of the chain. The _E_ message of a chain ended by its last chord, by a chord that matches no chain, by a reload or by a grab toggle has no _A_ before it, and the one of a timed-out chain has a _T_ instead.
+
+Protocol compatibility
+~~~~~~~~~~~~~~~~~~~~~~
+
+This is version 2 of the protocol; version 1 had no _L_ and no _A_ message. A consumer must ignore the lines whose prefix it does not know, so that later versions can add prefixes. An existing prefix keeps its meaning and its relative order with respect to the other messages across versions; a consumer written for version 1 therefore keeps working, and one that needs the locked or aborted state reads _L_ and _A_.
 
 For example, given the two hotkeys
 
@@ -135,6 +144,27 @@ EEnd chain
 Cecho H
 ----
 
+Given instead the locked hotkey
+
+----
+super + m : h
+    echo H
+----
+
+pressing _super + m_, then _h_, then _Escape_ (the default abort keysym) produces:
+
+----
+Hsuper + m
+BBegin chain
+LChain locked
+Hsuper + m;h
+Cecho H
+AChain aborted
+EEnd chain
+----
+
+Every further _h_ pressed before _Escape_ repeats the _Hsuper + m;h_ and _Cecho H_ lines. Had the timeout been reached while the chain was waiting for its second chord, _TTimeout reached_ and _EEnd chain_ would have followed _BBegin chain_ (a locked chain never times out).
+
 A minimal consumer starts *sxhkd* on a pipe, waits for the pipe to appear, and reads it line by line, stripping the prefix:
 
 ----
@@ -145,6 +175,8 @@ while read -r line; do
     case $line in
         H*) notify-send -t 2000 "sxhkd" "${line#?}" ;;
         C*) notify-send -t 4000 "sxhkd" "Running: ${line#?}" ;;
+        L*) notify-send -t 2000 "sxhkd" "Chain locked" ;;
+        A*) notify-send -t 1000 "sxhkd" "Chain aborted" ;;
         T*) notify-send -t 1000 "sxhkd" "Chain timed out" ;;
     esac
 done < "$XDG_RUNTIME_DIR/sxhkd.fifo"
