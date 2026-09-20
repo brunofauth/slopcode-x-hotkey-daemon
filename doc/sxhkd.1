@@ -2,12 +2,12 @@
 .\"     Title: sxhkd
 .\"    Author: [see the "Author" section]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 09/19/2026
+.\"      Date: 09/20/2026
 .\"    Manual: Sxhkd Manual
-.\"    Source: Sxhkd 0.7.4
+.\"    Source: Sxhkd 0.8.0
 .\"  Language: English
 .\"
-.TH "SXHKD" "1" "09/19/2026" "Sxhkd 0\&.7\&.4" "Sxhkd Manual"
+.TH "SXHKD" "1" "09/20/2026" "Sxhkd 0\&.8\&.0" "Sxhkd Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -85,7 +85,8 @@ Redirect the commands output to the given file\&.
 .RS 4
 Output status information to the given FIFO (see the
 \fIStatus FIFO\fR
-section)\&. The FIFO is created if it does not exist\&.
+section)\&. The FIFO is created if it does not exist\&. May be given several times, each with a different
+\fIPATH\fR: every message is written to each FIFO\&.
 .RE
 .PP
 \fB\-a\fR, \fB\-\-abort\-keysym\fR \fIKEYSYM\fR
@@ -94,52 +95,6 @@ Name of the keysym used for aborting chord chains (default
 \fIEscape\fR)\&. It must have a keycode in the current keymap, otherwise
 \fBsxhkd\fR
 refuses to start\&.
-.RE
-.PP
-\fB\-i\fR, \fB\-\-indicator\fR \fIPOSITION\fR
-.RS 4
-Show an on\-screen indicator while a chord chain is in progress, anchored at the given
-\fIPOSITION\fR
-of the screen:
-\fItop\fR,
-\fItop\-left\fR,
-\fItop\-right\fR,
-\fIcenter\fR,
-\fIcenter\-left\fR,
-\fIcenter\-right\fR,
-\fIbottom\fR,
-\fIbottom\-left\fR
-or
-\fIbottom\-right\fR\&.
-.RE
-.PP
-\fB\-f\fR, \fB\-\-indicator\-font\fR \fIFONT\fR
-.RS 4
-Font of the chain indicator, as a Pango font description (default:
-\fImonospace 14\fR)\&. Only meaningful with
-\fB\-i\fR\&.
-.RE
-.PP
-\fB\-F\fR, \fB\-\-indicator\-foreground\fR \fICOLOR\fR
-.RS 4
-Foreground color of the chain indicator, as
-\fI#rrggbb\fR
-or
-\fI#rrggbbaa\fR
-(default:
-\fI#ffffff\fR)\&. Only meaningful with
-\fB\-i\fR\&.
-.RE
-.PP
-\fB\-B\fR, \fB\-\-indicator\-background\fR \fICOLOR\fR
-.RS 4
-Background color of the chain indicator, as
-\fI#rrggbb\fR
-or
-\fI#rrggbbaa\fR
-(default:
-\fI#222222\fR)\&. Only meaningful with
-\fB\-i\fR\&.
 .RE
 .SH "BEHAVIOR"
 .sp
@@ -153,7 +108,7 @@ If \fBsxhkd\fR receives a \fISIGUSR1\fR (resp\&. \fISIGUSR2\fR) signal, it will 
 .sp
 If \fBsxhkd\fR receives a \fISIGALRM\fR signal, it will break the current chain if there is one in progress\&. A locked chain is not affected (it has no timeout)\&.
 .sp
-With the \fB\-i\fR option, \fBsxhkd\fR shows a small window while a chord chain is in progress\&. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below)\&. The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached\&. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size\&. Translucent colors (an alpha below \fIff\fR) need a compositing manager and an X server that offers a 32\-bit visual\&. Without a compositing manager they render darker and fully transparent areas black; without a 32\-bit visual they are painted fully opaque\&. \fBsxhkd\fR warns at startup in either case\&.
+An on\-screen indicator of the chord chain in progress is a separate program, \fBsxhkd\-indicator\fR(1), which reads the status FIFO described below (\fBsxhkd \-s\fR \fIPATH\fR)\&. \fBsxhkd\fR itself draws nothing, and needs no library beyond xcb\&.
 .sp
 The commands are executed via \fBSHELL\fR \fI\-c\fR \fBCOMMAND\fR (hence you can use environment variables)\&.
 .sp
@@ -168,6 +123,8 @@ With the \fB\-s\fR option, \fBsxhkd\fR reports what it is doing to a named pipe,
 .sp
 \fBsxhkd\fR creates the pipe, readable and writable by its owner only, if nothing exists at the path, and removes it at exit in that case; a pipe that already exists is used as it is and left in place\&. Anything else at the path, or a pipe that cannot be created or opened, is a startup error\&. \fBsxhkd\fR opens the pipe for reading and writing in non\-blocking mode, so it starts even when nobody is reading yet and never stalls on the pipe\&. Messages written while nobody is reading are kept by the pipe until it is full, and are dropped afterwards\&. The commands \fBsxhkd\fR runs do not inherit the pipe, so a reader sees end\-of\-file once \fBsxhkd\fR exits\&.
 .sp
+A named pipe carries a single stream, so \fB\-s\fR may be given several times, with at most 8 distinct paths: every message is written to each pipe, and several consumers (an indicator, a notification script, a status bar) read independently, each pipe keeping and dropping messages on its own\&.
+.sp
 Each message is a single line made of a one\-character prefix followed by a text:
 .sp
 .if n \{\
@@ -177,6 +134,8 @@ Each message is a single line made of a one\-character prefix followed by a text
 PREFIX  WHEN                                        TEXT
 H       a chord was received                        the chords received so far
 B       a chord chain has begun                     Begin chain
+L       the chord chain has been locked             Chain locked
+A       the abort keysym ended the chord chain      Chain aborted
 E       the chord chain has ended                   End chain
 T       the chord chain timed out                   Timeout reached
 C       a command has been started                  the command
@@ -187,7 +146,12 @@ C       a command has been started                  the command
 .sp
 The text of an \fIH\fR message is the list of the chords received since the chain began, separated by semicolons, each one written as in the configuration file (modifiers, \fB~\fR and \fB@\fR included)\&. Every chord that matches a hotkey produces an \fIH\fR message, including the only chord of a single\-chord hotkey\&. In a locked chain, every chord received after the lock produces an \fIH\fR message made of the locked prefix and that chord; the prefix itself never grows\&.
 .sp
-\fIB\fR is sent after the \fIH\fR message of the first chord of a chain, and \fIE\fR is sent whenever the chain ends: after its last chord, when the abort keysym is pressed, when the timeout is reached (in which case a \fIT\fR message precedes it), or when \fBsxhkd\fR reloads its configuration or ungrabs its bindings while a chain is in progress\&. \fIC\fR is sent after the command has been started, and after the \fIE\fR message when the command ends a chain\&.
+\fIB\fR is sent after the \fIH\fR message of the first chord of a chain, and \fIE\fR is sent whenever the chain ends: after its last chord, when the abort keysym is pressed, when the timeout is reached (in which case a \fIT\fR message precedes it), when the chord received matches no chain, or when \fBsxhkd\fR reloads its configuration or ungrabs its bindings while a chain is in progress\&. \fIC\fR is sent after the command has been started, and after the \fIE\fR message when the command ends a chain\&.
+.sp
+\fIL\fR is sent once per chain, right after the \fIH\fR message of the chord that is followed by \fB:\fR in the configuration (after the \fIB\fR message when that chord is the first one of the chain); the chain is locked from then on and no further \fIL\fR is sent for it, whichever chords it receives\&. \fIA\fR is sent right before the \fIE\fR message when the abort keysym ended the chain, whether the chain was locked or not; pressing the abort keysym produces no \fIH\fR message of its own, since it is not a chord of the chain\&. The \fIE\fR message of a chain ended by its last chord, by a chord that matches no chain, by a reload or by a grab toggle has no \fIA\fR before it, and the one of a timed\-out chain has a \fIT\fR instead\&.
+.SS "Protocol compatibility"
+.sp
+This is version 2 of the protocol; version 1 had no \fIL\fR and no \fIA\fR message\&. A consumer must ignore the lines whose prefix it does not know, so that later versions can add prefixes\&. An existing prefix keeps its meaning and its relative order with respect to the other messages across versions; a consumer written for version 1 therefore keeps working, and one that needs the locked or aborted state reads \fIL\fR and \fIA\fR\&.
 .sp
 For example, given the two hotkeys
 .sp
@@ -234,6 +198,39 @@ Cecho H
 .RE
 .\}
 .sp
+Given instead the locked hotkey
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+super + m : h
+    echo H
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+pressing \fIsuper + m\fR, then \fIh\fR, then \fIEscape\fR (the default abort keysym) produces:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+Hsuper + m
+BBegin chain
+LChain locked
+Hsuper + m;h
+Cecho H
+AChain aborted
+EEnd chain
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+Every further \fIh\fR pressed before \fIEscape\fR repeats the \fIHsuper + m;h\fR and \fICecho H\fR lines\&. Had the timeout been reached while the chain was waiting for its second chord, \fITTimeout reached\fR and \fIEEnd chain\fR would have followed \fIBBegin chain\fR (a locked chain never times out)\&.
+.sp
 A minimal consumer starts \fBsxhkd\fR on a pipe, waits for the pipe to appear, and reads it line by line, stripping the prefix:
 .sp
 .if n \{\
@@ -247,6 +244,8 @@ while read \-r line; do
     case $line in
         H*) notify\-send \-t 2000 "sxhkd" "${line#?}" ;;
         C*) notify\-send \-t 4000 "sxhkd" "Running: ${line#?}" ;;
+        L*) notify\-send \-t 2000 "sxhkd" "Chain locked" ;;
+        A*) notify\-send \-t 1000 "sxhkd" "Chain aborted" ;;
         T*) notify\-send \-t 1000 "sxhkd" "Chain timed out" ;;
     esac
 done < "$XDG_RUNTIME_DIR/sxhkd\&.fifo"
@@ -336,6 +335,9 @@ The hotkey and the command may contain sequences of the form \fI{STRING_1,\&...,
 In addition, the sequences can contain ranges of the form \fIA\fR\-\fIZ\fR where \fIA\fR and \fIZ\fR are alphanumeric characters\&.
 .sp
 The underscore character represents an empty sequence element\&.
+.SH "SEE ALSO"
+.sp
+\fBsxhkd\-indicator\fR(1)
 .SH "AUTHOR"
 .sp
 Bastien Dejean <nihilhill at gmail\&.com>
