@@ -47,12 +47,9 @@
 #include <stdbool.h>
 #include "parse.h"
 #include "grab.h"
-#include "indicator.h"
 #include "options.h"
 
 xcb_connection_t *dpy;
-xcb_screen_t *screen;
-int screen_number;
 xcb_window_t root;
 xcb_key_symbols_t *symbols;
 
@@ -123,9 +120,6 @@ int main(int argc, char *argv[])
 			err("Invalid keysym name: '%s'.\n", abort_keysym_name);
 	}
 
-	if (options->indicator_look_given_without_position)
-		warn("The indicator font and colors have no effect without --indicator.\n");
-
 	if (options->config_path == NULL) {
 		char *config_home = getenv(CONFIG_HOME_ENV);
 		if (config_home != NULL)
@@ -156,7 +150,6 @@ int main(int argc, char *argv[])
 	install_signal_handler(SIGALRM, hold);
 
 	setup();
-	indicator_init(&options->indicator, dpy, screen, screen_number);
 	get_standard_keysyms();
 	get_lock_fields();
 	abort_chord = make_abort_chord(abort_keysym);
@@ -201,9 +194,10 @@ int main(int argc, char *argv[])
 	xcb_flush(dpy);
 
 	while (running) {
-		/* Events that libxcb read while waiting for a reply (cairo-xcb does
-		 * that) sit in its queue without making the descriptor readable, so
-		 * look there before blocking in pselect(). */
+		/* Events that libxcb read while waiting for the reply of one of the
+		 * daemon's own requests (a grab, a keymap query) sit in its queue
+		 * without making the descriptor readable, so look there before
+		 * blocking in pselect(). */
 		evt = xcb_poll_for_queued_event(dpy);
 		if (evt == NULL) {
 			FD_ZERO(&descriptors);
@@ -222,12 +216,6 @@ int main(int argc, char *argv[])
 					break;
 				case XCB_MAPPING_NOTIFY:
 					mapping_notify(evt);
-					break;
-				case XCB_EXPOSE:
-					indicator_handle_expose((const xcb_expose_event_t *) evt);
-					break;
-				case XCB_CONFIGURE_NOTIFY:
-					indicator_handle_configure_notify((const xcb_configure_notify_event_t *) evt);
 					break;
 				default:
 					PRINTF("received event %u\n", event_type);
@@ -267,10 +255,6 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		/* Every path that changes the recorder state (key events, timeout,
-		 * reload, mapping notify) has run by now; make the screen match. */
-		indicator_sync_with_chain_phase(chain_phase, progress);
-
 		if (xcb_connection_has_error(dpy)) {
 			warn("The server closed the connection.\n");
 			running = false;
@@ -284,7 +268,6 @@ int main(int argc, char *argv[])
 	close_status_fifos();
 
 	ungrab();
-	indicator_shutdown();
 	cleanup();
 	destroy_abort_chord(abort_chord);
 	xcb_key_symbols_free(symbols);
@@ -304,10 +287,6 @@ void key_button_event(xcb_generic_event_t *evt, uint8_t event_type)
 	if (keysym != XCB_NO_SYMBOL || button != XCB_NONE) {
 		hotkey_t *hk = find_hotkey(keysym, button, modfield, event_type, &replay_event);
 		if (hk != NULL) {
-			/* A synchronous command blocks this process until it finishes; let
-			 * the screen reflect the chain state before that rather than after. */
-			if (hk->sync)
-				indicator_sync_with_chain_phase(chain_phase, progress);
 			run(hk->command, hk->sync);
 			put_status(COMMAND_PREFIX, hk->command);
 		}
@@ -369,10 +348,9 @@ void setup(void)
 	dpy = xcb_connect(NULL, &screen_idx);
 	if (xcb_connection_has_error(dpy))
 		err("Can't open display.\n");
-	screen_number = screen_idx;
 	xcb_xkb_use_extension(dpy, XCB_XKB_MAJOR_VERSION, XCB_XKB_MINOR_VERSION);
 	xcb_xkb_per_client_flags(dpy, XCB_XKB_ID_USE_CORE_KBD, XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT, 1, 0, 0, 0);
-	screen = NULL;
+	xcb_screen_t *screen = NULL;
 	xcb_screen_iterator_t screen_iter = xcb_setup_roots_iterator(xcb_get_setup(dpy));
 	for (; screen_iter.rem; xcb_screen_next(&screen_iter), screen_idx--) {
 		if (screen_idx == 0) {

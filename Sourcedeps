@@ -4,15 +4,13 @@ INDICATOR_OBJ += cli.o
 diagnostics.o: diagnostics.c diagnostics.h
 OBJ += diagnostics.o
 INDICATOR_OBJ += diagnostics.o
-grab.o: chain_phase.h cli.h diagnostics.h grab.c grab.h helpers.h indicator_core.h options.h parse.h sxhkd.h types.h
+grab.o: chain_phase.h cli.h diagnostics.h grab.c grab.h helpers.h options.h parse.h sxhkd.h types.h
 OBJ += grab.o
-helpers.o: chain_phase.h cli.h diagnostics.h helpers.c helpers.h indicator_core.h options.h sxhkd.h types.h
+helpers.o: chain_phase.h cli.h diagnostics.h helpers.c helpers.h options.h sxhkd.h types.h
 OBJ += helpers.o
 indicator.o: chain_phase.h diagnostics.h indicator.c indicator.h indicator_core.h
-OBJ += indicator.o
 INDICATOR_OBJ += indicator.o
 indicator_core.o: chain_phase.h diagnostics.h indicator_core.c indicator_core.h
-OBJ += indicator_core.o
 INDICATOR_OBJ += indicator_core.o
 indicator_main.o: chain_phase.h cli.h diagnostics.h indicator.h indicator_core.h indicator_main.c indicator_options.h indicator_protocol.h
 INDICATOR_OBJ += indicator_main.o
@@ -20,11 +18,11 @@ indicator_options.o: chain_phase.h cli.h diagnostics.h indicator_core.h indicato
 INDICATOR_OBJ += indicator_options.o
 indicator_protocol.o: chain_phase.h indicator_protocol.c indicator_protocol.h
 INDICATOR_OBJ += indicator_protocol.o
-options.o: chain_phase.h cli.h diagnostics.h helpers.h indicator_core.h options.c options.h
+options.o: chain_phase.h cli.h diagnostics.h helpers.h options.c options.h
 OBJ += options.o
-parse.o: chain_phase.h cli.h diagnostics.h helpers.h indicator_core.h locales.h options.h parse.c parse.h sxhkd.h types.h
+parse.o: chain_phase.h cli.h diagnostics.h helpers.h locales.h options.h parse.c parse.h sxhkd.h types.h
 OBJ += parse.o
-sxhkd.o: chain_phase.h cli.h diagnostics.h grab.h helpers.h indicator.h indicator_core.h options.h parse.h sxhkd.c sxhkd.h types.h
+sxhkd.o: chain_phase.h cli.h diagnostics.h grab.h helpers.h options.h parse.h sxhkd.c sxhkd.h types.h
 OBJ += sxhkd.o
-types.o: chain_phase.h cli.h diagnostics.h grab.h helpers.h indicator_core.h options.h parse.h sxhkd.h types.c types.h
+types.o: chain_phase.h cli.h diagnostics.h grab.h helpers.h options.h parse.h sxhkd.h types.c types.h
 OBJ += types.o

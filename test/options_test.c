@@ -50,6 +50,11 @@ static bool message_contains(command_line_t command_line, const char *needle)
 	return command_line.kind == COMMAND_LINE_INVALID && strstr(command_line.as.invalid.message, needle) != NULL;
 }
 
+static bool message_is(command_line_t command_line, const char *expected)
+{
+	return command_line.kind == COMMAND_LINE_INVALID && strcmp(command_line.as.invalid.message, expected) == 0;
+}
+
 static void test_defaults(void)
 {
 	char *arguments[] = {"sxhkd"};
@@ -60,8 +65,6 @@ static void test_defaults(void)
 	CHECK(run->timeout_in_seconds == 3);
 	CHECK(run->config_path == NULL && run->redirect_path == NULL && run->abort_keysym_name == NULL);
 	CHECK(run->status_fifo_count == 0);
-	CHECK(run->indicator.kind == INDICATOR_SETTINGS_DISABLED);
-	CHECK(!run->indicator_look_given_without_position);
 	CHECK(run->extra_config_count == 0);
 }
 
@@ -180,10 +183,6 @@ static void test_empty_values(void)
 		{"--abort-keysym=", "--abort-keysym", "KEYSYM"},
 		{"--mapping-count=", "--mapping-count", "COUNT"},
 		{"--timeout=", "--timeout", "SECONDS"},
-		{"--indicator=", "--indicator", "POSITION"},
-		{"--indicator-font=", "--indicator-font", "FONT"},
-		{"--indicator-foreground=", "--indicator-foreground", "COLOR"},
-		{"--indicator-background=", "--indicator-background", "COLOR"},
 	};
 	for (size_t index = 0; index < sizeof(inline_cases) / sizeof(*inline_cases); index++) {
 		const command_line_t command_line = PARSE(inline_cases[index].argument);
@@ -198,43 +197,40 @@ static void test_empty_values(void)
 	CHECK(message_contains(PARSE("-r", ""), "invalid value '' for -r: expected a non-empty FILE"));
 	CHECK(message_contains(PARSE("-s", ""), "invalid value '' for -s: expected a non-empty PATH"));
 	CHECK(message_contains(PARSE("-a", ""), "invalid value '' for -a: expected a non-empty KEYSYM"));
-	CHECK(message_contains(PARSE("-f", ""), "invalid value '' for -f: expected a non-empty FONT"));
 	CHECK(message_contains(PARSE("-m", ""), "invalid value '' for -m: expected a non-empty COUNT"));
 	CHECK(message_contains(PARSE("-t", ""), "invalid value '' for -t: expected a non-empty SECONDS"));
 }
 
-static void test_indicator(void)
+/* The options of the indicator that used to live inside the daemon are
+ * gone. A command line written for an older version is told where the
+ * indicator went: the engine's diagnostic, exactly as it writes it for any
+ * unknown option, followed by the hint. */
+static void test_removed_indicator_options(void)
 {
-	command_line_t command_line = PARSE("--indicator", "bottom-left", "--indicator-font", "Mono 9", "--indicator-foreground=#010203", "-B#a0b0c0");
-	CHECK(command_line.kind == COMMAND_LINE_RUN);
-	CHECK(command_line.as.run.indicator.kind == INDICATOR_SETTINGS_ENABLED);
-	const indicator_config_t *config = &command_line.as.run.indicator.as.enabled;
-	CHECK(config->position == INDICATOR_POSITION_BOTTOM_LEFT);
-	CHECK(strcmp(config->font_description_text, "Mono 9") == 0);
-	CHECK(config->foreground_color.red == 1 && config->foreground_color.green == 2 && config->foreground_color.blue == 3);
-	CHECK(config->background_color.red == 0xa0 && config->background_color.green == 0xb0 && config->background_color.blue == 0xc0);
-	CHECK(!command_line.as.run.indicator_look_given_without_position);
-	CHECK(config->foreground_color.alpha == 0xff && config->background_color.alpha == 0xff);
-
-	command_line = PARSE("-i", "top", "--indicator-background=#22222280");
-	CHECK(command_line.kind == COMMAND_LINE_RUN && command_line.as.run.indicator.as.enabled.background_color.alpha == 0x80);
-	CHECK(message_contains(PARSE("-B", "#abc"), "#rrggbb or #rrggbbaa"));
-
-	command_line = PARSE("-i", "top");
-	CHECK(command_line.as.run.indicator.kind == INDICATOR_SETTINGS_ENABLED);
-	CHECK(strcmp(command_line.as.run.indicator.as.enabled.font_description_text, INDICATOR_DEFAULT_FONT_DESCRIPTION) == 0);
-	CHECK(command_line.as.run.indicator.as.enabled.foreground_color.red == 0xff);
-
-	command_line = PARSE("--indicator-foreground", "#000000");
-	CHECK(command_line.kind == COMMAND_LINE_RUN);
-	CHECK(command_line.as.run.indicator.kind == INDICATOR_SETTINGS_DISABLED);
-	CHECK(command_line.as.run.indicator_look_given_without_position);
-
-	command_line = PARSE("-i", "bogus");
-	CHECK(message_contains(command_line, "invalid value 'bogus' for -i"));
-	CHECK(message_contains(command_line, "top-left") && message_contains(command_line, " or bottom-right"));
-	CHECK(message_contains(PARSE("--indicator-background=12345"), "#rrggbb"));
-	CHECK(message_contains(PARSE("--indicator-font="), "expected a non-empty FONT"));
+	CHECK(message_is(PARSE("--indicator", "top"), "unrecognized option '--indicator': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("--indicator=top"), "unrecognized option '--indicator=top': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("--indicator-font", "Mono 9"), "unrecognized option '--indicator-font': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("--indicator-foreground=#ffffff"), "unrecognized option '--indicator-foreground=#ffffff': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("--indicator-background", "#222222"), "unrecognized option '--indicator-background': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-i", "top"), "invalid option -- 'i': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-itop"), "invalid option -- 'i': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-f", "Mono 9"), "invalid option -- 'f': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-F#ffffff"), "invalid option -- 'F': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-B", "#222222"), "invalid option -- 'B': the chain indicator is now sxhkd-indicator(1)"));
+	/* The hint comes wherever the engine's diagnostic comes: after the
+	 * options before it were applied, and only for the first unknown one. */
+	CHECK(message_is(PARSE("-t", "5", "-s", "one", "--indicator", "top"), "unrecognized option '--indicator': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-Bx"), "invalid option -- 'B': the chain indicator is now sxhkd-indicator(1)"));
+	CHECK(message_is(PARSE("-xB"), "invalid option -- 'x'"));
+	/* Other unknown options, near-misses included, get the engine's words only. */
+	CHECK(message_is(PARSE("--bogus"), "unrecognized option '--bogus'"));
+	CHECK(message_is(PARSE("--indicators"), "unrecognized option '--indicators'"));
+	CHECK(message_is(PARSE("--indicator-fon"), "unrecognized option '--indicator-fon'"));
+	CHECK(message_is(PARSE("--indicator-"), "unrecognized option '--indicator-'"));
+	CHECK(message_is(PARSE("-x"), "invalid option -- 'x'"));
+	/* No other diagnostic is touched. */
+	CHECK(message_is(PARSE("-t", "x"), "invalid value 'x' for -t: expected a non-negative integer"));
+	CHECK(message_is(PARSE("--config"), "option '--config' requires an argument FILE"));
 }
 
 static void test_print_usage(void)
@@ -250,12 +246,12 @@ static void test_print_usage(void)
 		"Usage: sxhkd [OPTION]... [EXTRA_CONFIG]...",
 		"-h, --help", "-v, --version", "-m, --mapping-count COUNT", "-t, --timeout SECONDS",
 		"-c, --config FILE", "-r, --redirect FILE", "-s, --status-fifo PATH", "-a, --abort-keysym KEYSYM",
-		"-i, --indicator POSITION", "-f, --indicator-font FONT", "-F, --indicator-foreground COLOR",
-		"-B, --indicator-background COLOR", "default \"monospace 14\"", "default #ffffff", "default #222222",
 		"COUNT (>= 0)", "-1: all (default 0)", "0: never (default 3)",
-		"Positions for --indicator:",
-		"  top, top-left, top-right, center, center-left, center-right, bottom, bottom-left or bottom-right.",
-		"sxhkd(1)",
+		"sxhkd(1)", "sxhkd-indicator(1)",
+	};
+	/* The indicator's options and their notes left with the indicator. */
+	static const char *unexpected_fragments[] = {
+		"--indicator", "-i, ", "-f, ", "-F, ", "-B, ", "POSITION", "FONT", "COLOR", "Positions", "Pango",
 	};
 	bool fragment_seen[sizeof(expected_fragments) / sizeof(*expected_fragments)] = {false};
 	char line[512];
@@ -267,6 +263,11 @@ static void test_print_usage(void)
 		for (size_t index = 0; index < sizeof(expected_fragments) / sizeof(*expected_fragments); index++) {
 			if (strstr(line, expected_fragments[index]) != NULL)
 				fragment_seen[index] = true;
+		}
+		for (size_t index = 0; index < sizeof(unexpected_fragments) / sizeof(*unexpected_fragments); index++) {
+			if (strstr(line, unexpected_fragments[index]) != NULL)
+				fprintf(stderr, "help text still has: %s\n", unexpected_fragments[index]);
+			CHECK(strstr(line, unexpected_fragments[index]) == NULL);
 		}
 	}
 	for (size_t index = 0; index < sizeof(expected_fragments) / sizeof(*expected_fragments); index++) {
@@ -288,7 +289,7 @@ int main(void)
 	test_paths_and_keysym();
 	test_status_fifos();
 	test_empty_values();
-	test_indicator();
+	test_removed_indicator_options();
 	test_print_usage();
 	printf("options_test: %u passed, %u failed\n", passed_check_count, failed_check_count);
 	return failed_check_count == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

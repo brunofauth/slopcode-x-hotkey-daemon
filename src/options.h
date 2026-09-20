@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include "cli.h"
 #include "helpers.h"
-#include "indicator_core.h"
 
 #define DEFAULT_CHAIN_TIMEOUT_IN_SECONDS 3
 #define DEFAULT_MAPPING_COUNT            0
@@ -45,9 +44,6 @@ typedef struct {
 	const char *status_fifo_paths[MAX_STATUS_FIFOS];
 	int status_fifo_count;
 	const char *abort_keysym_name;    /* NULL: the default keysym */
-	indicator_settings_t indicator;   /* disabled unless --indicator was given */
-	/* --indicator-font/-foreground/-background were given but --indicator was not. */
-	bool indicator_look_given_without_position;
 	int extra_config_count;
 	char **extra_config_paths;        /* the non-option arguments, in order */
 } run_options_t;

@@ -2,11 +2,12 @@
 
 I forked sxhkd (simple X hotkey daemon) into sxhkd (SLOPCODE X hotkey daemon),
 a fork which adds a visual indicator for key chains. Think of it like Vim's
-mode indicator, that improved on Vi's raw mode modeing. This extension could
-also have been a small separate binary reading sxhkd's existing FIFO interface,
-but that was so poorly documented that I only noticed it as a real option after
-already having forked the original project, so this is what you (we, mostly me)
-get.
+mode indicator, that improved on Vi's raw mode modeing. This extension is now
+what it could have been from the start: a small separate binary,
+`sxhkd-indicator`, reading sxhkd's existing FIFO interface. That interface was
+so poorly documented that I only noticed it as a real option after already
+having forked the original project, so the indicator first lived inside the
+daemon; it has since moved out, and the daemon itself links nothing but xcb.
 
 
 ## Description
@@ -20,29 +21,34 @@ The format of the configuration file supports a simple notation for mapping
 multiple shortcuts to multiple commands in parallel.
 
 Chord chains (`super + m ; h`) and locked chains (`super + n : {h,j,k,l}`) act
-like modes. With the `-i` option, *sxhkd* shows a small on-screen indicator
-listing the chords received so far while a chain is in progress, so that you
-always know which mode you are in:
+like modes. `sxhkd-indicator` shows a small on-screen indicator listing the
+chords received so far while a chain is in progress, so that you always know
+which mode you are in. It reads the daemon's status FIFO, so the two are
+started together:
 
-	sxhkd --indicator top-right --indicator-font "monospace 14" -F '#ffffff' -B '#222222'
+	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
 
-Every option has a short and a long form; `sxhkd --help` lists them all.
-Colors take an optional alpha (`-B '#222222c0'`); translucency needs a compositing manager and a 32-bit visual (without the latter the colors are painted opaque).
+Every option has a short and a long form; `sxhkd --help` and
+`sxhkd-indicator --help` list them all.
 
 
 ### sxhkd-indicator
 
-The same banner is also available as a program of its own, `sxhkd-indicator`,
-which reads the daemon's status FIFO instead of living inside the daemon.
-Either side may start first: whichever finds no FIFO at the path creates it.
-The indicator waits for the daemon before opening the display, hides the banner
-when the daemon exits and waits for the next one, so it survives `sxhkd`
-restarts. Its look options are the daemon's, without the `--indicator-` prefix;
+The indicator is a program of its own: it learns what the daemon is doing from
+the status FIFO and never touches the daemon, so it can be started, stopped,
+restyled or replaced at will. Either side may start first: whichever finds no
+FIFO at the path creates it. The indicator waits for the daemon before opening
+the display, hides the banner when the daemon exits and waits for the next one,
+so it survives `sxhkd` restarts. `-i` anchors the banner (`top-right` by
+default), `-f` sets its font (a Pango description), `-F` and `-B` its text and
+background colors as `#rrggbb` or `#rrggbbaa`; translucency needs a compositing
+manager and a 32-bit visual (without the latter the colors are painted opaque).
 `-t` hides a chain shown in progress after that many seconds without a status
 line (default 3, 0 never), in case the line that ended it was lost.
 
 	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
-	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -i bottom -B '#222222c0' &
+	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -i bottom -f "monospace 14" -F '#ffffff' -B '#222222c0' &
 
 A notification script (see the next section) reads a pipe of its own, through
 a second `-s` on the daemon, so that neither consumer steals the other's lines:
@@ -119,17 +125,23 @@ See `examples/notification` for a complete setup, and the man page for the
 details of when each message is sent.
 
 
-## Dependencies
+## Building
 
-- libxcb, xcb-util-keysyms, xcb-util (`xcb_event.h`)
-- cairo (with its xcb backend), pango and pangocairo, located through
-  `pkg-config`
+`make` builds the two programs; `make PROGRAMS=sxhkd` (or
+`PROGRAMS=sxhkd-indicator`) builds, installs or uninstalls just one of them.
+Each has its own dependencies:
+
+- `sxhkd`: libxcb, xcb-util-keysyms, xcb-util (`xcb_event.h`); nothing else,
+  and no `pkg-config`.
+- `sxhkd-indicator`: the above, plus cairo (with its xcb backend), pango and
+  pangocairo, located through `pkg-config`.
 
 
 ### Arch Linux
 
-`contrib/arch/PKGBUILD` builds the checkout it lives in as the `sxhkd-git`
-package, which replaces the official `sxhkd`:
+`contrib/arch/PKGBUILD` builds the checkout it lives in as two packages:
+`sxhkd-git`, which replaces the official `sxhkd`, and `sxhkd-indicator-git`,
+which depends on it:
 
 	cd contrib/arch && makepkg -si
 
@@ -138,8 +150,10 @@ Set `SXHKD_GIT_URL` to a clone URL to build another repository instead.
 
 ### Nix
 
-`nix build` produces the package, `nix flake check` also runs the static
-analysis, and `nix develop` opens a shell with every build and test tool.
+`nix build` produces the daemon (`.#sxhkd`, the default output, whose closure
+has neither cairo nor pango) and `nix build .#sxhkd-indicator` the indicator;
+`nix flake check` builds both and runs the static analysis, and `nix develop`
+opens a shell with every build and test tool.
 
 
 ### Tests

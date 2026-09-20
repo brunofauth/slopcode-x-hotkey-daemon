@@ -400,8 +400,8 @@ static void release_resources(indicator_resources_t *resources)
 	xcb_flush(resources->connection);
 }
 
-/* One-way transition to the disabled state after a rendering error: sxhkd
- * keeps working, only the banner is gone. */
+/* One-way transition to the disabled state after a rendering error: the
+ * indicator program keeps running, only the banner is gone. */
 static void disable_after_error(cairo_status_t status)
 {
 	warn("Indicator disabled after a rendering error: %s.\n", cairo_status_to_string(status));
@@ -476,8 +476,8 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 	const xcb_window_t window = xcb_generate_id(connection);
 
 	/* Prefer the 32-bit visual; fall back to the root visual when the server
-	 * offers none or refuses it, and give up on the indicator, but not on
-	 * sxhkd, only if the root visual is refused too. */
+	 * offers none or refuses it, and give up on the banner, but not on the
+	 * indicator program, only if the root visual is refused too. */
 	window_visual_t visual = make_opaque_window_visual(screen_of_window);
 	bool window_created = false;
 	window_visual_t argb_visual;
@@ -529,7 +529,8 @@ void indicator_init(const indicator_settings_t *settings, xcb_connection_t *conn
 
 	/* Follow screen size changes: the server sends ConfigureNotify for the
 	 * root window to every client that selects StructureNotify on it, which
-	 * includes resizes driven by RandR. sxhkd selects nothing else on root. */
+	 * includes resizes driven by RandR. The indicator program selects nothing
+	 * else on root. */
 	const uint32_t root_event_mask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
 	const xcb_void_cookie_t root_attributes_cookie = xcb_change_window_attributes_checked(connection, screen_of_window->root, XCB_CW_EVENT_MASK, &root_event_mask);
 	uint8_t root_attributes_error_code = 0;

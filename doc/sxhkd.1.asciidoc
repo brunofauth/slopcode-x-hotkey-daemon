@@ -49,18 +49,6 @@ Every option has a short and a long form. Long options take their value as *--na
 *-a*, *--abort-keysym* _KEYSYM_::
     Name of the keysym used for aborting chord chains (default _Escape_). It must have a keycode in the current keymap, otherwise *sxhkd* refuses to start.
 
-*-i*, *--indicator* _POSITION_::
-    Show an on-screen indicator while a chord chain is in progress, anchored at the given _POSITION_ of the screen: _top_, _top-left_, _top-right_, _center_, _center-left_, _center-right_, _bottom_, _bottom-left_ or _bottom-right_.
-
-*-f*, *--indicator-font* _FONT_::
-    Font of the chain indicator, as a Pango font description (default: _monospace 14_). Only meaningful with *-i*.
-
-*-F*, *--indicator-foreground* _COLOR_::
-    Foreground color of the chain indicator, as _#rrggbb_ or _#rrggbbaa_ (default: _#ffffff_). Only meaningful with *-i*.
-
-*-B*, *--indicator-background* _COLOR_::
-    Background color of the chain indicator, as _#rrggbb_ or _#rrggbbaa_ (default: _#222222_). Only meaningful with *-i*.
-
 
 Behavior
 --------
@@ -75,7 +63,7 @@ If *sxhkd* receives a _SIGUSR1_ (resp. _SIGUSR2_) signal, it will reload its con
 
 If *sxhkd* receives a _SIGALRM_ signal, it will break the current chain if there is one in progress. A locked chain is not affected (it has no timeout).
 
-With the *-i* option, *sxhkd* shows a small window while a chord chain is in progress. It lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked (see below). The window disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the timeout was reached. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size. Translucent colors (an alpha below _ff_) need a compositing manager and an X server that offers a 32-bit visual. Without a compositing manager they render darker and fully transparent areas black; without a 32-bit visual they are painted fully opaque. *sxhkd* warns at startup in either case.
+An on-screen indicator of the chord chain in progress is a separate program, *sxhkd-indicator*(1), which reads the status FIFO described below (*sxhkd -s* _PATH_). *sxhkd* itself draws nothing, and needs no library beyond xcb.
 
 The commands are executed via *SHELL* _-c_ *COMMAND* (hence you can use environment variables).
 
@@ -231,6 +219,11 @@ The hotkey and the command may contain sequences of the form '{STRING_1,…,STRI
 In addition, the sequences can contain ranges of the form _A_-_Z_ where _A_ and _Z_ are alphanumeric characters.
 
 The underscore character represents an empty sequence element.
+
+See Also
+--------
+
+*sxhkd-indicator*(1)
 
 Author
 ------

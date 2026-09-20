@@ -35,11 +35,7 @@ typedef enum {
 	VALUED_CONFIG,
 	VALUED_REDIRECT,
 	VALUED_STATUS_FIFO,
-	VALUED_ABORT_KEYSYM,
-	VALUED_INDICATOR,
-	VALUED_INDICATOR_FONT,
-	VALUED_INDICATOR_FOREGROUND,
-	VALUED_INDICATOR_BACKGROUND
+	VALUED_ABORT_KEYSYM
 } valued_option_t;
 
 /* The single source of truth for the command line. Keep descriptions short:
@@ -59,37 +55,20 @@ static const cli_option_spec_t option_specs[] = {
 		"Report status lines to the FIFO at PATH, created if absent (repeatable)."),
 	CLI_VALUED('a', "abort-keysym", VALUED_ABORT_KEYSYM, "KEYSYM",
 		"Keysym that aborts a chord chain (default Escape)."),
-	CLI_VALUED('i', "indicator", VALUED_INDICATOR, "POSITION",
-		"Show the chain indicator at POSITION (see below)."),
-	CLI_VALUED('f', "indicator-font", VALUED_INDICATOR_FONT, "FONT",
-		"Indicator font, a Pango description (default \"" INDICATOR_DEFAULT_FONT_DESCRIPTION "\")."),
-	CLI_VALUED('F', "indicator-foreground", VALUED_INDICATOR_FOREGROUND, "COLOR",
-		"Indicator text color, #rrggbb or #rrggbbaa (default " INDICATOR_DEFAULT_FOREGROUND_COLOR ")."),
-	CLI_VALUED('B', "indicator-background", VALUED_INDICATOR_BACKGROUND, "COLOR",
-		"Indicator background color, #rrggbb or #rrggbbaa (default " INDICATOR_DEFAULT_BACKGROUND_COLOR ")."),
 };
 
-/* Parser state beyond the run options: the indicator configuration is
- * assembled here and only becomes part of the result once --indicator is
- * known, so the result never holds a "disabled" indicator carrying half a
- * configuration. */
-typedef struct {
-	run_options_t run_options;
-	indicator_config_t indicator_config;
-	bool indicator_position_given;
-	bool indicator_look_given;
-} parser_state_t;
-
-static void append_position_names(char *buffer, size_t capacity)
-{
-	for (size_t index = 0; index < indicator_position_name_count; index++) {
-		const char *separator = (index == 0) ? "" : (index + 1 == indicator_position_name_count) ? " or " : ", ";
-		const size_t used = strlen(buffer);
-		if (used >= capacity)
-			return;
-		snprintf(buffer + used, capacity - used, "%s%s", separator, indicator_position_names[index].name);
-	}
-}
+/* The options of the chain indicator that used to live inside the daemon,
+ * gone since the indicator became a program of its own (sxhkd-indicator).
+ * They are deliberately not rows of the table: a row would be listed by the
+ * help and would take a value like a live option. The engine reports them as
+ * unknown, and the daemon appends where they went (see
+ * explain_removed_indicator_option()), so that a command line written for an
+ * older version explains its own failure. */
+static const char *const removed_indicator_long_names[] = {
+	"indicator", "indicator-font", "indicator-foreground", "indicator-background"
+};
+static const char removed_indicator_short_names[] = "ifFB";
+#define REMOVED_INDICATOR_HINT "the chain indicator is now sxhkd-indicator(1)"
 
 /* Every rejected value is reported the same way; `expectation` completes
  * "expected ...". */
@@ -132,8 +111,7 @@ static cli_apply_result_t apply_flag(int flag_id, const char *option_as_written,
 
 static cli_apply_result_t apply_valued(int valued_id, const char *option_as_written, const char *value, void *state, cli_error_t *error)
 {
-	parser_state_t *parser_state = state;
-	run_options_t *run_options = &parser_state->run_options;
+	run_options_t *run_options = state;
 	cli_apply_result_t result = CLI_APPLY_CONTINUE;
 	switch ((valued_option_t) valued_id) {
 		case VALUED_MAPPING_COUNT:
@@ -156,96 +134,65 @@ static cli_apply_result_t apply_valued(int valued_id, const char *option_as_writ
 		case VALUED_ABORT_KEYSYM:
 			run_options->abort_keysym_name = value;
 			break;
-		case VALUED_INDICATOR:
-			if (!indicator_parse_position(value, &parser_state->indicator_config.position)) {
-				char position_names[MAXLEN] = "";
-				append_position_names(position_names, sizeof(position_names));
-				result = invalid_value(error, value, option_as_written, position_names);
-				break;
-			}
-			parser_state->indicator_position_given = true;
-			break;
-		case VALUED_INDICATOR_FONT:
-			parser_state->indicator_config.font_description_text = value;
-			parser_state->indicator_look_given = true;
-			break;
-		case VALUED_INDICATOR_FOREGROUND:
-			if (!indicator_parse_rgba_color(value, &parser_state->indicator_config.foreground_color)) {
-				result = invalid_value(error, value, option_as_written, "a color as #rrggbb or #rrggbbaa");
-				break;
-			}
-			parser_state->indicator_look_given = true;
-			break;
-		case VALUED_INDICATOR_BACKGROUND:
-			if (!indicator_parse_rgba_color(value, &parser_state->indicator_config.background_color)) {
-				result = invalid_value(error, value, option_as_written, "a color as #rrggbb or #rrggbbaa");
-				break;
-			}
-			parser_state->indicator_look_given = true;
-			break;
 	}
 	return result;
 }
 
-/* False iff a built-in default is broken: a programming error, not user
- * input, reported through `error`. */
-static bool initialize_parser_state(parser_state_t *state, cli_error_t *error)
+static void initialize_run_options(run_options_t *run_options)
 {
-	run_options_t *run_options = &state->run_options;
 	run_options->mapping_count = DEFAULT_MAPPING_COUNT;
 	run_options->timeout_in_seconds = DEFAULT_CHAIN_TIMEOUT_IN_SECONDS;
 	run_options->config_path = NULL;
 	run_options->redirect_path = NULL;
 	run_options->status_fifo_count = 0;
 	run_options->abort_keysym_name = NULL;
-	run_options->indicator.kind = INDICATOR_SETTINGS_DISABLED;
-	run_options->indicator_look_given_without_position = false;
 	run_options->extra_config_count = 0;
 	run_options->extra_config_paths = NULL;
-
-	state->indicator_config.position = INDICATOR_POSITION_TOP_RIGHT;
-	state->indicator_config.font_description_text = INDICATOR_DEFAULT_FONT_DESCRIPTION;
-	state->indicator_position_given = false;
-	state->indicator_look_given = false;
-	/* The built-in colors are constants verified by the unit test. */
-	if (!indicator_parse_rgba_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &state->indicator_config.foreground_color)
-			|| !indicator_parse_rgba_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &state->indicator_config.background_color)) {
-		cli_apply_invalid(error, "the built-in indicator colors are invalid");
-		return false;
-	}
-	return true;
 }
 
-/* The indicator is enabled iff a position was given; a look given without
- * one is only flagged, so that main can warn. */
-static run_options_t finalize_run_options(const parser_state_t *state, int extra_config_count, char **extra_config_paths)
+/* True iff `message` is the engine's diagnostic for an unknown option that
+ * used to be one of the indicator's: "unrecognized option '--NAME'" (or
+ * '--NAME=VALUE') for a long one, "invalid option -- 'X'" for a short one.
+ * The name is matched whole, so a mere near-miss gets no hint. */
+static bool names_removed_indicator_option(const char *message)
 {
-	run_options_t run_options = state->run_options;
-	if (state->indicator_position_given) {
-		run_options.indicator.kind = INDICATOR_SETTINGS_ENABLED;
-		run_options.indicator.as.enabled = state->indicator_config;
-	} else {
-		run_options.indicator.kind = INDICATOR_SETTINGS_DISABLED;
+	static const char long_prefix[] = "unrecognized option '--";
+	static const char short_prefix[] = "invalid option -- '";
+	if (strncmp(message, long_prefix, sizeof(long_prefix) - 1) == 0) {
+		const char *name = message + sizeof(long_prefix) - 1;
+		const size_t name_length = strcspn(name, "='");
+		for (size_t index = 0; index < LENGTH(removed_indicator_long_names); index++) {
+			const char *removed_name = removed_indicator_long_names[index];
+			if (strlen(removed_name) == name_length && strncmp(name, removed_name, name_length) == 0)
+				return true;
+		}
+		return false;
 	}
-	run_options.indicator_look_given_without_position = state->indicator_look_given && !state->indicator_position_given;
-	run_options.extra_config_count = extra_config_count;
-	run_options.extra_config_paths = extra_config_paths;
-	return run_options;
+	if (strncmp(message, short_prefix, sizeof(short_prefix) - 1) == 0) {
+		const char *letter = message + sizeof(short_prefix) - 1;
+		return letter[0] != '\0' && letter[1] == '\'' && strchr(removed_indicator_short_names, letter[0]) != NULL;
+	}
+	return false;
+}
+
+/* Appends the hint to the engine's diagnostic, which stays as written. */
+static void explain_removed_indicator_option(cli_error_t *error)
+{
+	char engine_message[CLI_MESSAGE_CAPACITY];
+	snprintf(engine_message, sizeof(engine_message), "%s", error->message);
+	cli_apply_invalid(error, "%s: " REMOVED_INDICATOR_HINT, engine_message);
 }
 
 command_line_t parse_command_line(int argument_count, char **arguments)
 {
 	command_line_t command_line;
-	parser_state_t state;
-	if (!initialize_parser_state(&state, &command_line.as.invalid)) {
-		command_line.kind = COMMAND_LINE_INVALID;
-		return command_line;
-	}
+	run_options_t run_options;
+	initialize_run_options(&run_options);
 
 	const cli_table_t table = {
 		.specs = option_specs,
 		.spec_count = LENGTH(option_specs),
-		.state = &state,
+		.state = &run_options,
 		.apply_flag = apply_flag,
 		.apply_valued = apply_valued,
 	};
@@ -253,7 +200,9 @@ command_line_t parse_command_line(int argument_count, char **arguments)
 	switch (outcome.kind) {
 		case CLI_OUTCOME_RUN:
 			command_line.kind = COMMAND_LINE_RUN;
-			command_line.as.run = finalize_run_options(&state, outcome.as.run.positional_count, outcome.as.run.positionals);
+			command_line.as.run = run_options;
+			command_line.as.run.extra_config_count = outcome.as.run.positional_count;
+			command_line.as.run.extra_config_paths = outcome.as.run.positionals;
 			break;
 		case CLI_OUTCOME_SHOW_HELP:
 			command_line.kind = COMMAND_LINE_SHOW_HELP;
@@ -264,6 +213,8 @@ command_line_t parse_command_line(int argument_count, char **arguments)
 		case CLI_OUTCOME_INVALID:
 			command_line.kind = COMMAND_LINE_INVALID;
 			command_line.as.invalid = outcome.as.invalid;
+			if (names_removed_indicator_option(command_line.as.invalid.message))
+				explain_removed_indicator_option(&command_line.as.invalid);
 			break;
 	}
 	return command_line;
@@ -271,19 +222,15 @@ command_line_t parse_command_line(int argument_count, char **arguments)
 
 void print_usage(FILE *output)
 {
-	char position_names[MAXLEN] = "";
-	append_position_names(position_names, sizeof(position_names));
-	char notes[2 * MAXLEN];
-	snprintf(notes, sizeof(notes), "Positions for --indicator:\n  %s.\n", position_names);
-
 	const cli_help_t help = {
 		.program_name = "sxhkd",
 		.usage_arguments = "[OPTION]... [EXTRA_CONFIG]...",
 		.summary = "Simple X hotkey daemon: runs commands on key chords and chord chains.",
 		.specs = option_specs,
 		.spec_count = LENGTH(option_specs),
-		.notes = notes,
-		.epilogue = "See sxhkd(1) for the configuration syntax and the status FIFO protocol.\n",
+		.notes = NULL,
+		.epilogue = "See sxhkd(1) for the configuration syntax and the status FIFO protocol.\n"
+		            "The on-screen chain indicator is a program of its own: see sxhkd-indicator(1).\n",
 	};
 	cli_print_help(output, &help);
 }
