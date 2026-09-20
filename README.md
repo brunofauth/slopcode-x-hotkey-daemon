@@ -30,6 +30,30 @@ Every option has a short and a long form; `sxhkd --help` lists them all.
 Colors take an optional alpha (`-B '#222222c0'`); translucency needs a compositing manager and a 32-bit visual (without the latter the colors are painted opaque).
 
 
+### sxhkd-indicator
+
+The same banner is also available as a program of its own, `sxhkd-indicator`,
+which reads the daemon's status FIFO instead of living inside the daemon.
+Either side may start first: whichever finds no FIFO at the path creates it.
+The indicator waits for the daemon before opening the display, hides the banner
+when the daemon exits and waits for the next one, so it survives `sxhkd`
+restarts. Its look options are the daemon's, without the `--indicator-` prefix;
+`-t` hides a chain shown in progress after that many seconds without a status
+line (default 3, 0 never), in case the line that ended it was lost.
+
+	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -i bottom -B '#222222c0' &
+
+A notification script (see the next section) reads a pipe of its own, through
+a second `-s` on the daemon, so that neither consumer steals the other's lines:
+
+	sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -s "$XDG_RUNTIME_DIR/sxhkd-notify.fifo" &
+	sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+	examples/notification/sxhkd_notify "$XDG_RUNTIME_DIR/sxhkd-notify.fifo" &
+
+`sxhkd-indicator --help` and `sxhkd-indicator(1)` have the details.
+
+
 ## Status FIFO
 
 With the `-s` option, *sxhkd* reports what it is doing to a named pipe, so that

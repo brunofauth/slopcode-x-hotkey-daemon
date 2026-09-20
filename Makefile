@@ -1,4 +1,5 @@
-OUT      = sxhkd
+OUT           = sxhkd
+INDICATOR_OUT = sxhkd-indicator
 VERCMD  ?= git describe --tags 2> /dev/null
 VERSION := $(shell $(VERCMD) || cat VERSION)
 
@@ -29,13 +30,16 @@ TEST_CFLAGS  ?= -fsanitize=address,undefined
 # the strictness gate.
 WERROR       ?=
 LDLIBS    = -lxcb -lxcb-keysyms -lxcb-xkb -lxcb-shape $(INDICATOR_LIBS)
+# The indicator program neither grabs keys nor uses XKB: only the banner's
+# libraries.
+INDICATOR_LDLIBS = -lxcb -lxcb-shape $(INDICATOR_LIBS)
 
 PREFIX    ?= /usr/local
 BINPREFIX ?= $(PREFIX)/bin
 MANPREFIX ?= $(PREFIX)/share/man
 DOCPREFIX ?= $(PREFIX)/share/doc/$(OUT)
 
-all: $(OUT) ## Build sxhkd (the default)
+all: $(OUT) $(INDICATOR_OUT) ## Build sxhkd and sxhkd-indicator (the default)
 
 # Every target followed by "## text" is listed by `make help`: the recipe
 # lines below must start with a tab, as in any other rule.
@@ -45,18 +49,27 @@ help: ## Show this help message
 
 debug: override CFLAGS += -O0 -g
 debug: override CPPFLAGS += -DDEBUG
-debug: $(OUT) ## Build sxhkd unoptimised with debugging symbols and DEBUG output
+debug: $(OUT) $(INDICATOR_OUT) ## Build both programs unoptimised with debugging symbols and DEBUG output
 
 VPATH = src
-OBJ   =
+# Sourcedeps assigns every object to the program(s) it belongs to; the
+# objects shared by both (the indicator, its core, the diagnostics, the
+# option engine) are listed under each and compiled once.
+OBJ           =
+INDICATOR_OBJ =
 
 include Sourcedeps
 
-$(OBJ): Makefile | check-indicator-deps
+$(sort $(OBJ) $(INDICATOR_OBJ)): Makefile | check-indicator-deps
 
 $(OUT): $(OBJ)
 
-cli.o diagnostics.o indicator_core.o indicator.o options.o: override CFLAGS += $(STRICT_CFLAGS)
+# No built-in rule links a program whose name matches no object (make's is
+# `%: %.o`), so unlike $(OUT) this one spells out the built-in recipe.
+$(INDICATOR_OUT): $(INDICATOR_OBJ)
+	$(CC) $(LDFLAGS) $^ $(LOADLIBES) $(INDICATOR_LDLIBS) -o $@
+
+cli.o diagnostics.o indicator_core.o indicator.o options.o indicator_main.o indicator_options.o indicator_protocol.o: override CFLAGS += $(STRICT_CFLAGS)
 
 check-indicator-deps:
 	@$(PKG_CONFIG) --exists $(INDICATOR_PKGS) || { \
@@ -64,7 +77,8 @@ check-indicator-deps:
 		exit 1; \
 	}
 
-ANALYZE_SRC = src/cli.c src/diagnostics.c src/indicator_core.c src/indicator.c src/options.c
+ANALYZE_SRC = src/cli.c src/diagnostics.c src/indicator_core.c src/indicator.c src/options.c \
+              src/indicator_main.c src/indicator_options.c src/indicator_protocol.c
 
 analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator, cli and option sources
 	for source in $(ANALYZE_SRC); do \
@@ -77,7 +91,7 @@ analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator, cli an
 		clang-tidy $(ANALYZE_SRC) -- $(CPPFLAGS) -std=c99 -Isrc; \
 	else echo "clang-tidy not installed, skipped"; fi
 
-TEST_BINS = test/indicator_core_test test/cli_test test/options_test
+TEST_BINS = test/indicator_core_test test/cli_test test/options_test test/indicator_protocol_test
 
 $(TEST_BINS): Makefile
 
@@ -85,6 +99,7 @@ check: $(TEST_BINS) ## Build and run the unit tests (TEST_CFLAGS, WERROR=-Werror
 	./test/indicator_core_test
 	./test/cli_test
 	./test/options_test
+	./test/indicator_protocol_test
 
 test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/indicator_core_test.c src/indicator_core.c
@@ -95,23 +110,29 @@ test/cli_test: test/cli_test.c src/cli.c src/cli.h src/chain_phase.h
 test/options_test: test/options_test.c src/options.c src/options.h src/cli.c src/cli.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h src/helpers.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/cli.c src/indicator_core.c
 
-install: ## Install the program, man page and examples under PREFIX
+# The core is linked for indicator_derive_banner(): the test checks that the
+# banner derived from the replayed view reads as the in-process one.
+test/indicator_protocol_test: test/indicator_protocol_test.c src/indicator_protocol.c src/indicator_protocol.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h
+	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/indicator_protocol_test.c src/indicator_protocol.c src/indicator_core.c
+
+install: ## Install both programs, their man pages and the examples under PREFIX
 	mkdir -p "$(DESTDIR)$(BINPREFIX)"
-	cp -pf $(OUT) "$(DESTDIR)$(BINPREFIX)"
+	cp -pf $(OUT) $(INDICATOR_OUT) "$(DESTDIR)$(BINPREFIX)"
 	mkdir -p "$(DESTDIR)$(MANPREFIX)"/man1
-	cp -p doc/$(OUT).1 "$(DESTDIR)$(MANPREFIX)"/man1
+	cp -p doc/$(OUT).1 doc/$(INDICATOR_OUT).1 "$(DESTDIR)$(MANPREFIX)"/man1
 	mkdir -p "$(DESTDIR)$(DOCPREFIX)"
 	cp -pr examples "$(DESTDIR)$(DOCPREFIX)"/examples
 
 uninstall: ## Remove what install put under PREFIX
-	rm -f "$(DESTDIR)$(BINPREFIX)"/$(OUT)
-	rm -f "$(DESTDIR)$(MANPREFIX)"/man1/$(OUT).1
+	rm -f "$(DESTDIR)$(BINPREFIX)"/$(OUT) "$(DESTDIR)$(BINPREFIX)"/$(INDICATOR_OUT)
+	rm -f "$(DESTDIR)$(MANPREFIX)"/man1/$(OUT).1 "$(DESTDIR)$(MANPREFIX)"/man1/$(INDICATOR_OUT).1
 	rm -rf "$(DESTDIR)$(DOCPREFIX)"
 
-doc: ## Regenerate the man page from doc/sxhkd.1.asciidoc (needs a2x)
+doc: ## Regenerate the man pages from doc/*.1.asciidoc (needs a2x)
 	a2x -v -d manpage -f manpage -a revnumber=$(VERSION) doc/$(OUT).1.asciidoc
+	a2x -v -d manpage -f manpage -a revnumber=$(VERSION) doc/$(INDICATOR_OUT).1.asciidoc
 
-clean: ## Remove the objects, the program and the test binaries
-	rm -f $(OBJ) $(OUT) $(TEST_BINS)
+clean: ## Remove the objects, the programs and the test binaries
+	rm -f $(sort $(OBJ) $(INDICATOR_OBJ)) $(OUT) $(INDICATOR_OUT) $(TEST_BINS)
 
 .PHONY: all debug install uninstall doc clean check check-indicator-deps analyze help

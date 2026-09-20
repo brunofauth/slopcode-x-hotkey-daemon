@@ -1,0 +1,149 @@
+'\" t
+.\"     Title: sxhkd-indicator
+.\"    Author: [see the "Author" section]
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 09/20/2026
+.\"    Manual: Sxhkd Manual
+.\"    Source: Sxhkd 0.7.4-4-g8400d5a
+.\"  Language: English
+.\"
+.TH "SXHKD\-INDICATOR" "1" "09/20/2026" "Sxhkd 0\&.7\&.4\-4\-g8400d5a" "Sxhkd Manual"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+sxhkd-indicator \- On\-screen chord\-chain indicator for sxhkd
+.SH "SYNOPSIS"
+.sp
+\fBsxhkd\-indicator\fR \fB\-s\fR \fIPATH\fR [\fIOPTIONS\fR]
+.SH "DESCRIPTION"
+.sp
+sxhkd\-indicator shows a small window while a chord chain of \fBsxhkd\fR is in progress, listing the chords received so far\&. It learns what the daemon is doing from the daemon\(cqs status FIFO (\fBsxhkd \-s\fR \fIPATH\fR) and runs as a separate program, so it can be started, stopped, restyled or replaced without touching the daemon\&.
+.SH "OPTIONS"
+.sp
+Every option has a short and a long form\&. Long options take their value as \fB\-\-name\fR=\fIVALUE\fR or \fB\-\-name\fR \fIVALUE\fR; \fB\-\-\fR ends the options\&. The program takes no other argument\&.
+.PP
+\fB\-h\fR, \fB\-\-help\fR
+.RS 4
+Print the help to standard output and exit\&.
+.RE
+.PP
+\fB\-v\fR, \fB\-\-version\fR
+.RS 4
+Print the version information to standard output and exit\&.
+.RE
+.PP
+\fB\-s\fR, \fB\-\-status\-fifo\fR \fIPATH\fR
+.RS 4
+Read the status lines from the FIFO at
+\fIPATH\fR, the one given to
+\fBsxhkd \-s\fR\&. Required\&. The FIFO is created if it does not exist (see the
+\fIBehavior\fR
+section)\&.
+.RE
+.PP
+\fB\-i\fR, \fB\-\-position\fR \fIPOSITION\fR
+.RS 4
+Anchor the window at the given
+\fIPOSITION\fR
+of the screen:
+\fItop\fR,
+\fItop\-left\fR,
+\fItop\-right\fR,
+\fIcenter\fR,
+\fIcenter\-left\fR,
+\fIcenter\-right\fR,
+\fIbottom\fR,
+\fIbottom\-left\fR
+or
+\fIbottom\-right\fR
+(default
+\fItop\-right\fR)\&.
+.RE
+.PP
+\fB\-f\fR, \fB\-\-font\fR \fIFONT\fR
+.RS 4
+Font of the banner, as a Pango font description (default:
+\fImonospace 14\fR)\&.
+.RE
+.PP
+\fB\-F\fR, \fB\-\-foreground\fR \fICOLOR\fR
+.RS 4
+Foreground color of the banner, as
+\fI#rrggbb\fR
+or
+\fI#rrggbbaa\fR
+(default:
+\fI#ffffff\fR)\&.
+.RE
+.PP
+\fB\-B\fR, \fB\-\-background\fR \fICOLOR\fR
+.RS 4
+Background color of the banner, as
+\fI#rrggbb\fR
+or
+\fI#rrggbbaa\fR
+(default:
+\fI#222222\fR)\&.
+.RE
+.PP
+\fB\-t\fR, \fB\-\-timeout\fR \fISECONDS\fR
+.RS 4
+Hide a chain in progress after
+\fISECONDS\fR
+without a status line, in case the line that ended it was lost\&.
+\fISECONDS\fR
+is a non\-negative integer;
+\fI0\fR
+disables this safety timeout (default
+\fI3\fR, the daemon\(cqs own default)\&. A locked chain never times out, as in the daemon\&.
+.RE
+.SH "BEHAVIOR"
+.sp
+The window lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked\&. It appears when a chain begins (a single\-chord hotkey shows nothing) and disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the daemon\(cqs timeout was reached\&. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size\&.
+.sp
+\fBsxhkd\-indicator\fR and \fBsxhkd\fR share one policy for the FIFO, so either may start first: whichever finds nothing at \fIPATH\fR creates the FIFO, readable and writable by its owner only, and removes it at exit; the other one finds it and uses it as it is\&. Anything else at the path is an error\&.
+.sp
+\fBsxhkd\-indicator\fR then waits, without opening the display, until the daemon opens its end of the FIFO\&. Once the daemon is there it connects to the X server, creates its window, and shows the chain in progress as the status lines arrive\&. When the daemon exits, the banner is hidden and \fBsxhkd\-indicator\fR goes back to waiting for the next daemon: it survives a restart of \fBsxhkd\fR\&. \fISIGINT\fR, \fISIGHUP\fR and \fISIGTERM\fR end it at any point, including while it waits\&.
+.sp
+The FIFO keeps the status lines only until it is full and drops them afterwards, so a line can be lost while the indicator is not reading, for instance while it starts\&. The \fB\-t\fR timeout covers the loss of the line that ended a chain: a chain shown in progress for that long without any line is taken to have ended\&. Lines with a prefix that this version does not know are ignored, as the protocol requires (see the \fIStatus FIFO\fR section of \fBsxhkd\fR(1))\&.
+.sp
+Translucent colors (an alpha below \fIff\fR) need a compositing manager and an X server that offers a 32\-bit visual\&. Without a compositing manager they render darker and fully transparent areas black; without a 32\-bit visual they are painted fully opaque\&. \fBsxhkd\-indicator\fR warns at startup in either case\&.
+.SH "EXAMPLE"
+.sp
+Start the daemon on a FIFO and the indicator on the same one, in either order:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+sxhkd \-s "$XDG_RUNTIME_DIR/sxhkd\&.fifo" &
+sxhkd\-indicator \-s "$XDG_RUNTIME_DIR/sxhkd\&.fifo" \-i bottom \-B \*(Aq#222222c0\*(Aq &
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+A second \fB\-s\fR on the daemon feeds another consumer, such as a notification script, without sharing the indicator\(cqs pipe\&.
+.SH "SEE ALSO"
+.sp
+\fBsxhkd\fR(1)
+.SH "AUTHOR"
+.sp
+Bruno Fauth <brunovfauth at gmail\&.com>

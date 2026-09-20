@@ -1,0 +1,90 @@
+:man source:   Sxhkd
+:man version:  {revnumber}
+:man manual:   Sxhkd Manual
+
+sxhkd-indicator(1)
+==================
+
+Name
+----
+
+sxhkd-indicator - On-screen chord-chain indicator for sxhkd
+
+Synopsis
+--------
+
+*sxhkd-indicator* *-s* _PATH_ [_OPTIONS_]
+
+Description
+-----------
+
+sxhkd-indicator shows a small window while a chord chain of *sxhkd* is in progress, listing the chords received so far. It learns what the daemon is doing from the daemon's status FIFO (*sxhkd -s* _PATH_) and runs as a separate program, so it can be started, stopped, restyled or replaced without touching the daemon.
+
+Options
+-------
+
+Every option has a short and a long form. Long options take their value as *--name*=_VALUE_ or *--name* _VALUE_; *--* ends the options. The program takes no other argument.
+
+*-h*, *--help*::
+    Print the help to standard output and exit.
+
+*-v*, *--version*::
+    Print the version information to standard output and exit.
+
+*-s*, *--status-fifo* _PATH_::
+    Read the status lines from the FIFO at _PATH_, the one given to *sxhkd -s*. Required. The FIFO is created if it does not exist (see the _Behavior_ section).
+
+*-i*, *--position* _POSITION_::
+    Anchor the window at the given _POSITION_ of the screen: _top_, _top-left_, _top-right_, _center_, _center-left_, _center-right_, _bottom_, _bottom-left_ or _bottom-right_ (default _top-right_).
+
+*-f*, *--font* _FONT_::
+    Font of the banner, as a Pango font description (default: _monospace 14_).
+
+*-F*, *--foreground* _COLOR_::
+    Foreground color of the banner, as _#rrggbb_ or _#rrggbbaa_ (default: _#ffffff_).
+
+*-B*, *--background* _COLOR_::
+    Background color of the banner, as _#rrggbb_ or _#rrggbbaa_ (default: _#222222_).
+
+*-t*, *--timeout* _SECONDS_::
+    Hide a chain in progress after _SECONDS_ without a status line, in case the line that ended it was lost. _SECONDS_ is a non-negative integer; _0_ disables this safety timeout (default _3_, the daemon's own default). A locked chain never times out, as in the daemon.
+
+
+Behavior
+--------
+
+The window lists the chords received so far, separated by semicolons, and ends with a semicolon when the chain is waiting for its next chord or with a colon when the chain is locked. It appears when a chain begins (a single-chord hotkey shows nothing) and disappears when the chain ends, whether because its last chord was received, the abort keysym was pressed or the daemon's timeout was reached. It never takes the keyboard focus, lets pointer events through, and follows changes of the screen size.
+
+*sxhkd-indicator* and *sxhkd* share one policy for the FIFO, so either may start first: whichever finds nothing at _PATH_ creates the FIFO, readable and writable by its owner only, and removes it at exit; the other one finds it and uses it as it is. Anything else at the path is an error.
+
+*sxhkd-indicator* then waits, without opening the display, until the daemon opens its end of the FIFO. Once the daemon is there it connects to the X server, creates its window, and shows the chain in progress as the status lines arrive. When the daemon exits, the banner is hidden and *sxhkd-indicator* goes back to waiting for the next daemon: it survives a restart of *sxhkd*. _SIGINT_, _SIGHUP_ and _SIGTERM_ end it at any point, including while it waits.
+
+The FIFO keeps the status lines only until it is full and drops them afterwards, so a line can be lost while the indicator is not reading, for instance while it starts. The *-t* timeout covers the loss of the line that ended a chain: a chain shown in progress for that long without any line is taken to have ended. Lines with a prefix that this version does not know are ignored, as the protocol requires (see the _Status FIFO_ section of *sxhkd*(1)).
+
+Translucent colors (an alpha below _ff_) need a compositing manager and an X server that offers a 32-bit visual. Without a compositing manager they render darker and fully transparent areas black; without a 32-bit visual they are painted fully opaque. *sxhkd-indicator* warns at startup in either case.
+
+Example
+-------
+
+Start the daemon on a FIFO and the indicator on the same one, in either order:
+
+----
+sxhkd -s "$XDG_RUNTIME_DIR/sxhkd.fifo" &
+sxhkd-indicator -s "$XDG_RUNTIME_DIR/sxhkd.fifo" -i bottom -B '#222222c0' &
+----
+
+A second *-s* on the daemon feeds another consumer, such as a notification script, without sharing the indicator's pipe.
+
+See Also
+--------
+
+*sxhkd*(1)
+
+Author
+------
+
+Bruno Fauth <brunovfauth at gmail.com>
+
+////
+vim: set ft=asciidoc:
+////

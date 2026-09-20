@@ -5,3 +5,5 @@ test/indicator_core_test
 result
 test/options_test
 test/cli_test
+sxhkd-indicator
+test/indicator_protocol_test
