@@ -18,11 +18,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <ctype.h>
-#include <errno.h>
 #include <limits.h>
-#include <stdarg.h>
-#include <stdlib.h>
 #include <string.h>
 #include "options.h"
 
@@ -46,112 +42,43 @@ typedef enum {
 	VALUED_INDICATOR_BACKGROUND
 } valued_option_t;
 
-typedef enum {
-	OPTION_KIND_FLAG,
-	OPTION_KIND_VALUED
-} option_kind_t;
-
-typedef struct {
-	char short_name;
-	const char *long_name;
-	const char *description;
-	option_kind_t kind;
-	union {
-		flag_option_t flag;                 /* valid iff kind == OPTION_KIND_FLAG */
-		struct {
-			valued_option_t id;
-			const char *argument_name;
-		} valued;                           /* valid iff kind == OPTION_KIND_VALUED */
-	} as;
-} option_spec_t;
-
-#define FLAG(short_name, long_name, id, description) \
-	{short_name, long_name, description, OPTION_KIND_FLAG, {.flag = id}}
-#define VALUED(short_name, long_name, id, argument_name, description) \
-	{short_name, long_name, description, OPTION_KIND_VALUED, {.valued = {id, argument_name}}}
-
 /* The single source of truth for the command line. Keep descriptions short:
  * the help text puts them in a column to the right of the option names. */
-static const option_spec_t option_specs[] = {
-	FLAG('h', "help", FLAG_HELP, "Print this help and exit."),
-	FLAG('v', "version", FLAG_VERSION, "Print the version and exit."),
-	VALUED('m', "mapping-count", VALUED_MAPPING_COUNT, "COUNT",
+static const cli_option_spec_t option_specs[] = {
+	CLI_FLAG('h', "help", FLAG_HELP, "Print this help and exit."),
+	CLI_FLAG('v', "version", FLAG_VERSION, "Print the version and exit."),
+	CLI_VALUED('m', "mapping-count", VALUED_MAPPING_COUNT, "COUNT",
 		"Handle the first COUNT (>= 0) mapping notify events; -1: all (default 0)."),
-	VALUED('t', "timeout", VALUED_TIMEOUT, "SECONDS",
+	CLI_VALUED('t', "timeout", VALUED_TIMEOUT, "SECONDS",
 		"Abort a chord chain after SECONDS without a chord; 0: never (default 3)."),
-	VALUED('c', "config", VALUED_CONFIG, "FILE",
+	CLI_VALUED('c', "config", VALUED_CONFIG, "FILE",
 		"Read the main configuration from FILE."),
-	VALUED('r', "redirect", VALUED_REDIRECT, "FILE",
+	CLI_VALUED('r', "redirect", VALUED_REDIRECT, "FILE",
 		"Redirect the output of the commands to FILE."),
-	VALUED('s', "status-fifo", VALUED_STATUS_FIFO, "PATH",
+	CLI_VALUED('s', "status-fifo", VALUED_STATUS_FIFO, "PATH",
 		"Report status lines to the FIFO at PATH, created if absent."),
-	VALUED('a', "abort-keysym", VALUED_ABORT_KEYSYM, "KEYSYM",
+	CLI_VALUED('a', "abort-keysym", VALUED_ABORT_KEYSYM, "KEYSYM",
 		"Keysym that aborts a chord chain (default Escape)."),
-	VALUED('i', "indicator", VALUED_INDICATOR, "POSITION",
+	CLI_VALUED('i', "indicator", VALUED_INDICATOR, "POSITION",
 		"Show the chain indicator at POSITION (see below)."),
-	VALUED('f', "indicator-font", VALUED_INDICATOR_FONT, "FONT",
+	CLI_VALUED('f', "indicator-font", VALUED_INDICATOR_FONT, "FONT",
 		"Indicator font, a Pango description (default \"" INDICATOR_DEFAULT_FONT_DESCRIPTION "\")."),
-	VALUED('F', "indicator-foreground", VALUED_INDICATOR_FOREGROUND, "COLOR",
+	CLI_VALUED('F', "indicator-foreground", VALUED_INDICATOR_FOREGROUND, "COLOR",
 		"Indicator text color, #rrggbb or #rrggbbaa (default " INDICATOR_DEFAULT_FOREGROUND_COLOR ")."),
-	VALUED('B', "indicator-background", VALUED_INDICATOR_BACKGROUND, "COLOR",
+	CLI_VALUED('B', "indicator-background", VALUED_INDICATOR_BACKGROUND, "COLOR",
 		"Indicator background color, #rrggbb or #rrggbbaa (default " INDICATOR_DEFAULT_BACKGROUND_COLOR ")."),
 };
 
-/* Parser state beyond the result: the indicator configuration is assembled
- * here and only becomes part of the result once --indicator is known, so the
- * result never holds a "disabled" indicator carrying half a configuration. */
+/* Parser state beyond the run options: the indicator configuration is
+ * assembled here and only becomes part of the result once --indicator is
+ * known, so the result never holds a "disabled" indicator carrying half a
+ * configuration. */
 typedef struct {
-	command_line_t result;
+	run_options_t run_options;
 	indicator_config_t indicator_config;
 	bool indicator_position_given;
 	bool indicator_look_given;
 } parser_state_t;
-
-static const option_spec_t *find_spec_by_short_name(char short_name)
-{
-	for (size_t index = 0; index < LENGTH(option_specs); index++) {
-		if (option_specs[index].short_name == short_name)
-			return &option_specs[index];
-	}
-	return NULL;
-}
-
-static const option_spec_t *find_spec_by_long_name(const char *long_name, size_t long_name_length)
-{
-	for (size_t index = 0; index < LENGTH(option_specs); index++) {
-		const char *candidate = option_specs[index].long_name;
-		if (strlen(candidate) == long_name_length && strncmp(candidate, long_name, long_name_length) == 0)
-			return &option_specs[index];
-	}
-	return NULL;
-}
-
-__attribute__((format(printf, 2, 3)))
-static void set_invalid(command_line_t *result, const char *format, ...)
-{
-	result->kind = COMMAND_LINE_INVALID;
-	va_list arguments;
-	va_start(arguments, format);
-	vsnprintf(result->as.invalid.message, sizeof(result->as.invalid.message), format, arguments);
-	va_end(arguments);
-}
-
-/* Accepts exactly an optional '-' followed by decimal digits, within
- * [minimum, maximum]. Stricter than strtol, which also takes leading
- * whitespace and a '+' sign. */
-static bool parse_integer(const char *text, long minimum, long maximum, int *parsed_value)
-{
-	const char *first_digit = (text[0] == '-') ? text + 1 : text;
-	if (!isdigit((unsigned char) first_digit[0]))
-		return false;
-	char *end_of_number = NULL;
-	errno = 0;
-	const long value = strtol(text, &end_of_number, 10);
-	if (errno != 0 || *end_of_number != '\0' || value < minimum || value > maximum)
-		return false;
-	*parsed_value = (int) value;
-	return true;
-}
 
 static void append_position_names(char *buffer, size_t capacity)
 {
@@ -164,78 +91,92 @@ static void append_position_names(char *buffer, size_t capacity)
 	}
 }
 
-static void apply_flag(parser_state_t *state, flag_option_t flag)
+/* Every rejected value is reported the same way; `expectation` completes
+ * "expected ...". */
+static cli_apply_result_t invalid_value(cli_error_t *error, const char *value, const char *option_as_written, const char *expectation)
 {
-	switch (flag) {
-		case FLAG_HELP:
-			state->result.kind = COMMAND_LINE_SHOW_HELP;
-			return;
-		case FLAG_VERSION:
-			state->result.kind = COMMAND_LINE_SHOW_VERSION;
-			return;
-	}
+	return cli_apply_invalid(error, "invalid value '%s' for %s: expected %s", value, option_as_written, expectation);
 }
 
-/* `option_as_written` is "-x" or "--long-name", for diagnostics. */
-static void apply_valued(parser_state_t *state, valued_option_t option, const char *option_as_written, const char *value)
+static cli_apply_result_t apply_flag(int flag_id, const char *option_as_written, void *state, cli_error_t *error)
 {
-	command_line_t *result = &state->result;
-	run_options_t *run_options = &result->as.run;
-	switch (option) {
+	(void) option_as_written;
+	(void) state;
+	(void) error;
+	cli_apply_result_t result = CLI_APPLY_CONTINUE;
+	switch ((flag_option_t) flag_id) {
+		case FLAG_HELP:
+			result = CLI_APPLY_SHOW_HELP;
+			break;
+		case FLAG_VERSION:
+			result = CLI_APPLY_SHOW_VERSION;
+			break;
+	}
+	return result;
+}
+
+static cli_apply_result_t apply_valued(int valued_id, const char *option_as_written, const char *value, void *state, cli_error_t *error)
+{
+	parser_state_t *parser_state = state;
+	run_options_t *run_options = &parser_state->run_options;
+	cli_apply_result_t result = CLI_APPLY_CONTINUE;
+	switch ((valued_option_t) valued_id) {
 		case VALUED_MAPPING_COUNT:
-			if (!parse_integer(value, -1, INT_MAX, &run_options->mapping_count))
-				set_invalid(result, "invalid value '%s' for %s: expected -1 or a non-negative integer", value, option_as_written);
-			return;
+			if (!cli_parse_integer(value, -1, INT_MAX, &run_options->mapping_count))
+				result = invalid_value(error, value, option_as_written, "-1 or a non-negative integer");
+			break;
 		case VALUED_TIMEOUT:
-			if (!parse_integer(value, 0, INT_MAX, &run_options->timeout_in_seconds))
-				set_invalid(result, "invalid value '%s' for %s: expected a non-negative integer", value, option_as_written);
-			return;
+			if (!cli_parse_integer(value, 0, INT_MAX, &run_options->timeout_in_seconds))
+				result = invalid_value(error, value, option_as_written, "a non-negative integer");
+			break;
 		case VALUED_CONFIG:
 			run_options->config_path = value;
-			return;
+			break;
 		case VALUED_REDIRECT:
 			run_options->redirect_path = value;
-			return;
+			break;
 		case VALUED_STATUS_FIFO:
 			run_options->status_fifo_path = value;
-			return;
+			break;
 		case VALUED_ABORT_KEYSYM:
 			run_options->abort_keysym_name = value;
-			return;
+			break;
 		case VALUED_INDICATOR:
-			if (!indicator_parse_position(value, &state->indicator_config.position)) {
+			if (!indicator_parse_position(value, &parser_state->indicator_config.position)) {
 				char position_names[MAXLEN] = "";
 				append_position_names(position_names, sizeof(position_names));
-				set_invalid(result, "invalid value '%s' for %s: expected %s", value, option_as_written, position_names);
-				return;
+				result = invalid_value(error, value, option_as_written, position_names);
+				break;
 			}
-			state->indicator_position_given = true;
-			return;
+			parser_state->indicator_position_given = true;
+			break;
 		case VALUED_INDICATOR_FONT:
-			state->indicator_config.font_description_text = value;
-			state->indicator_look_given = true;
-			return;
+			parser_state->indicator_config.font_description_text = value;
+			parser_state->indicator_look_given = true;
+			break;
 		case VALUED_INDICATOR_FOREGROUND:
-			if (!indicator_parse_rgba_color(value, &state->indicator_config.foreground_color)) {
-				set_invalid(result, "invalid value '%s' for %s: expected a color as #rrggbb or #rrggbbaa", value, option_as_written);
-				return;
+			if (!indicator_parse_rgba_color(value, &parser_state->indicator_config.foreground_color)) {
+				result = invalid_value(error, value, option_as_written, "a color as #rrggbb or #rrggbbaa");
+				break;
 			}
-			state->indicator_look_given = true;
-			return;
+			parser_state->indicator_look_given = true;
+			break;
 		case VALUED_INDICATOR_BACKGROUND:
-			if (!indicator_parse_rgba_color(value, &state->indicator_config.background_color)) {
-				set_invalid(result, "invalid value '%s' for %s: expected a color as #rrggbb or #rrggbbaa", value, option_as_written);
-				return;
+			if (!indicator_parse_rgba_color(value, &parser_state->indicator_config.background_color)) {
+				result = invalid_value(error, value, option_as_written, "a color as #rrggbb or #rrggbbaa");
+				break;
 			}
-			state->indicator_look_given = true;
-			return;
+			parser_state->indicator_look_given = true;
+			break;
 	}
+	return result;
 }
 
-static void initialize_parser_state(parser_state_t *state)
+/* False iff a built-in default is broken: a programming error, not user
+ * input, reported through `error`. */
+static bool initialize_parser_state(parser_state_t *state, cli_error_t *error)
 {
-	state->result.kind = COMMAND_LINE_RUN;
-	run_options_t *run_options = &state->result.as.run;
+	run_options_t *run_options = &state->run_options;
 	run_options->mapping_count = DEFAULT_MAPPING_COUNT;
 	run_options->timeout_in_seconds = DEFAULT_CHAIN_TIMEOUT_IN_SECONDS;
 	run_options->config_path = NULL;
@@ -249,167 +190,85 @@ static void initialize_parser_state(parser_state_t *state)
 
 	state->indicator_config.position = INDICATOR_POSITION_TOP_RIGHT;
 	state->indicator_config.font_description_text = INDICATOR_DEFAULT_FONT_DESCRIPTION;
-	/* The built-in colors are constants verified by the unit test; a failure
-	 * here would be a programming error, not user input. */
-	if (!indicator_parse_rgba_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &state->indicator_config.foreground_color)
-			|| !indicator_parse_rgba_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &state->indicator_config.background_color))
-		set_invalid(&state->result, "the built-in indicator colors are invalid");
 	state->indicator_position_given = false;
 	state->indicator_look_given = false;
+	/* The built-in colors are constants verified by the unit test. */
+	if (!indicator_parse_rgba_color(INDICATOR_DEFAULT_FOREGROUND_COLOR, &state->indicator_config.foreground_color)
+			|| !indicator_parse_rgba_color(INDICATOR_DEFAULT_BACKGROUND_COLOR, &state->indicator_config.background_color)) {
+		cli_apply_invalid(error, "the built-in indicator colors are invalid");
+		return false;
+	}
+	return true;
 }
 
-static void finalize_run_options(parser_state_t *state, char **arguments, int extra_config_count)
+/* The indicator is enabled iff a position was given; a look given without
+ * one is only flagged, so that main can warn. */
+static run_options_t finalize_run_options(const parser_state_t *state, int extra_config_count, char **extra_config_paths)
 {
-	run_options_t *run_options = &state->result.as.run;
+	run_options_t run_options = state->run_options;
 	if (state->indicator_position_given) {
-		run_options->indicator.kind = INDICATOR_SETTINGS_ENABLED;
-		run_options->indicator.as.enabled = state->indicator_config;
+		run_options.indicator.kind = INDICATOR_SETTINGS_ENABLED;
+		run_options.indicator.as.enabled = state->indicator_config;
 	} else {
-		run_options->indicator.kind = INDICATOR_SETTINGS_DISABLED;
+		run_options.indicator.kind = INDICATOR_SETTINGS_DISABLED;
 	}
-	run_options->indicator_look_given_without_position = state->indicator_look_given && !state->indicator_position_given;
-	run_options->extra_config_count = extra_config_count;
-	run_options->extra_config_paths = arguments + 1;
-}
-
-/* Applies one option. `inline_value` is the value attached to the option
- * itself ("--name=VALUE" or "-xVALUE"), NULL if there was none; a valued
- * option without one consumes the next argument. Advances `*index` when it
- * does. Leaves the result in a non-RUN state to stop parsing. */
-static void apply_spec(parser_state_t *state, const option_spec_t *spec, const char *option_as_written, const char *inline_value, char **arguments, int argument_count, int *index)
-{
-	switch (spec->kind) {
-		case OPTION_KIND_FLAG:
-			if (inline_value != NULL) {
-				set_invalid(&state->result, "option '%s' does not take a value", option_as_written);
-				return;
-			}
-			apply_flag(state, spec->as.flag);
-			return;
-		case OPTION_KIND_VALUED: {
-			const char *value = inline_value;
-			if (value == NULL) {
-				if (*index + 1 >= argument_count) {
-					set_invalid(&state->result, "option '%s' requires an argument %s", option_as_written, spec->as.valued.argument_name);
-					return;
-				}
-				*index += 1;
-				value = arguments[*index];
-			}
-			/* No valued option has a meaningful empty value: an empty path,
-			 * keysym or number would only fail later, or silently misbehave. */
-			if (value[0] == '\0') {
-				set_invalid(&state->result, "invalid value '' for %s: expected a non-empty %s", option_as_written, spec->as.valued.argument_name);
-				return;
-			}
-			apply_valued(state, spec->as.valued.id, option_as_written, value);
-			return;
-		}
-	}
+	run_options.indicator_look_given_without_position = state->indicator_look_given && !state->indicator_position_given;
+	run_options.extra_config_count = extra_config_count;
+	run_options.extra_config_paths = extra_config_paths;
+	return run_options;
 }
 
 command_line_t parse_command_line(int argument_count, char **arguments)
 {
+	command_line_t command_line;
 	parser_state_t state;
-	initialize_parser_state(&state);
-	if (state.result.kind != COMMAND_LINE_RUN)
-		return state.result;
-
-	/* Non-option arguments are compacted towards arguments[1]. The target slot
-	 * never exceeds the index being read, so no unread entry is overwritten. */
-	int next_extra_slot = 1;
-	bool options_ended = false;
-
-	for (int index = 1; index < argument_count; index++) {
-		char *argument = arguments[index];
-		const bool looks_like_option = argument[0] == '-' && argument[1] != '\0';
-		if (options_ended || !looks_like_option) {
-			arguments[next_extra_slot] = argument;
-			next_extra_slot++;
-			continue;
-		}
-		if (strcmp(argument, "--") == 0) {
-			options_ended = true;
-			continue;
-		}
-
-		if (argument[1] == '-') {
-			const char *long_name = argument + 2;
-			const char *equals_sign = strchr(long_name, '=');
-			const size_t long_name_length = (equals_sign != NULL) ? (size_t) (equals_sign - long_name) : strlen(long_name);
-			const option_spec_t *spec = find_spec_by_long_name(long_name, long_name_length);
-			if (spec == NULL) {
-				set_invalid(&state.result, "unrecognized option '%s'", argument);
-				return state.result;
-			}
-			char option_as_written[MAXLEN];
-			snprintf(option_as_written, sizeof(option_as_written), "--%s", spec->long_name);
-			const char *inline_value = (equals_sign != NULL) ? equals_sign + 1 : NULL;
-			apply_spec(&state, spec, option_as_written, inline_value, arguments, argument_count, &index);
-			if (state.result.kind != COMMAND_LINE_RUN)
-				return state.result;
-		} else {
-			/* A cluster of short options: flags may be chained; the first valued
-			 * option consumes the rest of the cluster (or the next argument). */
-			for (const char *cursor = argument + 1; *cursor != '\0'; cursor++) {
-				const option_spec_t *spec = find_spec_by_short_name(*cursor);
-				if (spec == NULL) {
-					set_invalid(&state.result, "invalid option -- '%c'", *cursor);
-					return state.result;
-				}
-				const char option_as_written[3] = {'-', *cursor, '\0'};
-				const char *inline_value = NULL;
-				bool rest_of_cluster_consumed = false;
-				switch (spec->kind) {
-					case OPTION_KIND_FLAG:
-						break;
-					case OPTION_KIND_VALUED:
-						rest_of_cluster_consumed = true;
-						if (cursor[1] != '\0')
-							inline_value = cursor + 1;
-						break;
-				}
-				apply_spec(&state, spec, option_as_written, inline_value, arguments, argument_count, &index);
-				if (state.result.kind != COMMAND_LINE_RUN)
-					return state.result;
-				if (rest_of_cluster_consumed)
-					break;
-			}
-		}
+	if (!initialize_parser_state(&state, &command_line.as.invalid)) {
+		command_line.kind = COMMAND_LINE_INVALID;
+		return command_line;
 	}
 
-	finalize_run_options(&state, arguments, next_extra_slot - 1);
-	return state.result;
+	const cli_table_t table = {
+		.specs = option_specs,
+		.spec_count = LENGTH(option_specs),
+		.state = &state,
+		.apply_flag = apply_flag,
+		.apply_valued = apply_valued,
+	};
+	const cli_outcome_t outcome = cli_parse(&table, argument_count, arguments);
+	switch (outcome.kind) {
+		case CLI_OUTCOME_RUN:
+			command_line.kind = COMMAND_LINE_RUN;
+			command_line.as.run = finalize_run_options(&state, outcome.as.run.positional_count, outcome.as.run.positionals);
+			break;
+		case CLI_OUTCOME_SHOW_HELP:
+			command_line.kind = COMMAND_LINE_SHOW_HELP;
+			break;
+		case CLI_OUTCOME_SHOW_VERSION:
+			command_line.kind = COMMAND_LINE_SHOW_VERSION;
+			break;
+		case CLI_OUTCOME_INVALID:
+			command_line.kind = COMMAND_LINE_INVALID;
+			command_line.as.invalid = outcome.as.invalid;
+			break;
+	}
+	return command_line;
 }
 
 void print_usage(FILE *output)
 {
-	fprintf(output, "Usage: sxhkd [OPTION]... [EXTRA_CONFIG]...\n");
-	fprintf(output, "Simple X hotkey daemon: runs commands on key chords and chord chains.\n\n");
-	fprintf(output, "Options:\n");
-
-	char option_names[LENGTH(option_specs)][MAXLEN];
-	size_t column_width = 0;
-	for (size_t index = 0; index < LENGTH(option_specs); index++) {
-		const option_spec_t *spec = &option_specs[index];
-		switch (spec->kind) {
-			case OPTION_KIND_FLAG:
-				snprintf(option_names[index], sizeof(option_names[index]), "  -%c, --%s", spec->short_name, spec->long_name);
-				break;
-			case OPTION_KIND_VALUED:
-				snprintf(option_names[index], sizeof(option_names[index]), "  -%c, --%s %s", spec->short_name, spec->long_name, spec->as.valued.argument_name);
-				break;
-		}
-		const size_t width = strlen(option_names[index]);
-		if (width > column_width)
-			column_width = width;
-	}
-	for (size_t index = 0; index < LENGTH(option_specs); index++)
-		fprintf(output, "%-*s  %s\n", (int) column_width, option_names[index], option_specs[index].description);
-
 	char position_names[MAXLEN] = "";
 	append_position_names(position_names, sizeof(position_names));
-	fprintf(output, "\nPositions for --indicator:\n  %s.\n", position_names);
-	fprintf(output, "Long options also accept --name=VALUE; -- ends the options.\n");
-	fprintf(output, "See sxhkd(1) for the configuration syntax and the status FIFO protocol.\n");
+	char notes[2 * MAXLEN];
+	snprintf(notes, sizeof(notes), "Positions for --indicator:\n  %s.\n", position_names);
+
+	const cli_help_t help = {
+		.program_name = "sxhkd",
+		.usage_arguments = "[OPTION]... [EXTRA_CONFIG]...",
+		.summary = "Simple X hotkey daemon: runs commands on key chords and chord chains.",
+		.specs = option_specs,
+		.spec_count = LENGTH(option_specs),
+		.notes = notes,
+		.epilogue = "See sxhkd(1) for the configuration syntax and the status FIFO protocol.\n",
+	};
+	cli_print_help(output, &help);
 }

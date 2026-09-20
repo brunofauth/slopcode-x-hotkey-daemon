@@ -18,7 +18,10 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Headless unit test for src/options.c. Built and run by `make check`. */
+/* Headless unit test for src/options.c: the daemon's table, typed results
+ * and diagnostics. The engine itself (every form, clusters, permutation,
+ * the generic diagnostics) is covered by test/cli_test.c against a
+ * synthetic table. Built and run by `make check`. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +73,6 @@ static void test_help_and_version(void)
 	CHECK(PARSE("-vh").kind == COMMAND_LINE_SHOW_VERSION);   /* first one wins */
 	CHECK(PARSE("-hv").kind == COMMAND_LINE_SHOW_HELP);
 	CHECK(PARSE("-t", "5", "--help").kind == COMMAND_LINE_SHOW_HELP);
-	CHECK(message_contains(PARSE("--help=yes"), "does not take a value"));
 }
 
 static void test_timeout_forms(void)
@@ -87,10 +89,6 @@ static void test_timeout_forms(void)
 	CHECK(message_contains(command_line, "--timeout") && message_contains(command_line, "non-negative"));
 	command_line = PARSE("--timeout=");
 	CHECK(message_contains(command_line, "--timeout"));
-	command_line = PARSE("--timeout");
-	CHECK(message_contains(command_line, "requires an argument SECONDS"));
-	command_line = PARSE("-t");
-	CHECK(message_contains(command_line, "'-t' requires an argument"));
 	CHECK(message_contains(PARSE("-t", "99999999999"), "--timeout") || message_contains(PARSE("-t", "99999999999"), "-t"));
 	/* Exact grammar: strtol would accept a leading '+' or whitespace. */
 	CHECK(message_contains(PARSE("-t", "+5"), "invalid value '+5' for -t"));
@@ -116,26 +114,10 @@ static void test_mapping_count(void)
 	CHECK(message_contains(PARSE("-m", "99999999999"), "expected -1 or a non-negative integer"));
 }
 
-static void test_unknown_options(void)
+/* The non-option arguments are the extra configuration files. */
+static void test_extra_configs(void)
 {
-	CHECK(message_contains(PARSE("--bogus"), "unrecognized option '--bogus'"));
-	CHECK(message_contains(PARSE("--time=5"), "unrecognized option"));   /* no abbreviations */
-	CHECK(message_contains(PARSE("-z"), "invalid option -- 'z'"));
-	CHECK(message_contains(PARSE("-tz"), "invalid value 'z' for -t"));
-}
-
-static void test_extra_configs_and_permutation(void)
-{
-	command_line_t command_line = PARSE("a.conf", "-t", "5", "b.conf", "--", "-t", "-");
-	CHECK(command_line.kind == COMMAND_LINE_RUN);
-	CHECK(command_line.as.run.timeout_in_seconds == 5);
-	CHECK(command_line.as.run.extra_config_count == 4);
-	CHECK(strcmp(command_line.as.run.extra_config_paths[0], "a.conf") == 0);
-	CHECK(strcmp(command_line.as.run.extra_config_paths[1], "b.conf") == 0);
-	CHECK(strcmp(command_line.as.run.extra_config_paths[2], "-t") == 0);
-	CHECK(strcmp(command_line.as.run.extra_config_paths[3], "-") == 0);
-
-	command_line = PARSE("-c", "main.conf", "extra.conf");
+	const command_line_t command_line = PARSE("-c", "main.conf", "extra.conf");
 	CHECK(strcmp(command_line.as.run.config_path, "main.conf") == 0);
 	CHECK(command_line.as.run.extra_config_count == 1 && strcmp(command_line.as.run.extra_config_paths[0], "extra.conf") == 0);
 }
@@ -186,9 +168,6 @@ static void test_empty_values(void)
 	CHECK(message_contains(PARSE("-f", ""), "invalid value '' for -f: expected a non-empty FONT"));
 	CHECK(message_contains(PARSE("-m", ""), "invalid value '' for -m: expected a non-empty COUNT"));
 	CHECK(message_contains(PARSE("-t", ""), "invalid value '' for -t: expected a non-empty SECONDS"));
-	CHECK(message_contains(PARSE("--config", ""), "invalid value '' for --config"));
-	/* "-c" followed by nothing at all is a missing argument, not an empty one. */
-	CHECK(message_contains(PARSE("-c"), "'-c' requires an argument FILE"));
 }
 
 static void test_indicator(void)
@@ -272,8 +251,7 @@ int main(void)
 	test_help_and_version();
 	test_timeout_forms();
 	test_mapping_count();
-	test_unknown_options();
-	test_extra_configs_and_permutation();
+	test_extra_configs();
 	test_paths_and_keysym();
 	test_empty_values();
 	test_indicator();

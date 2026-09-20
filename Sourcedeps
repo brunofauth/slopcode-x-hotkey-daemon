@@ -1,3 +1,5 @@
+cli.o: cli.c chain_phase.h cli.h
+OBJ += cli.o
 diagnostics.o: diagnostics.c diagnostics.h
 OBJ += diagnostics.o
 grab.o: grab.c chain_phase.h diagnostics.h grab.h helpers.h parse.h sxhkd.h types.h
@@ -8,7 +10,7 @@ indicator.o: indicator.c chain_phase.h diagnostics.h indicator.h indicator_core.
 OBJ += indicator.o
 indicator_core.o: indicator_core.c chain_phase.h diagnostics.h indicator_core.h
 OBJ += indicator_core.o
-options.o: options.c chain_phase.h diagnostics.h helpers.h indicator_core.h options.h
+options.o: options.c chain_phase.h cli.h diagnostics.h helpers.h indicator_core.h options.h
 OBJ += options.o
 parse.o: parse.c chain_phase.h diagnostics.h helpers.h locales.h parse.h sxhkd.h types.h
 OBJ += parse.o

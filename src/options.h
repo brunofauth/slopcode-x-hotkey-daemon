@@ -21,12 +21,13 @@
 #ifndef SXHKD_OPTIONS_H
 #define SXHKD_OPTIONS_H
 
-/* Command-line parsing. One table of option specifications drives the
- * parser, the generated --help text and the diagnostics, so they cannot
- * disagree. Pure C99 and libc: unit-tested headlessly (test/options_test.c). */
+/* The daemon's command line: its option table and the typed result. The argv
+ * walk, the diagnostics and the layout of the help text come from the engine
+ * in cli.h. Pure C99 and libc: unit-tested headlessly (test/options_test.c). */
 
 #include <stdbool.h>
 #include <stdio.h>
+#include "cli.h"
 #include "helpers.h"
 #include "indicator_core.h"
 
@@ -57,8 +58,8 @@ typedef enum {
 typedef struct {
 	command_line_kind_t kind;
 	union {
-		run_options_t run;                         /* valid iff kind == COMMAND_LINE_RUN */
-		struct { char message[2 * MAXLEN]; } invalid;   /* valid iff kind == COMMAND_LINE_INVALID; no trailing newline */
+		run_options_t run;     /* valid iff kind == COMMAND_LINE_RUN */
+		cli_error_t invalid;   /* valid iff kind == COMMAND_LINE_INVALID; no trailing newline */
 	} as;
 } command_line_t;
 

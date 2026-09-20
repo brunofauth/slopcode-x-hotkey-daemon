@@ -56,7 +56,7 @@ $(OBJ): Makefile | check-indicator-deps
 
 $(OUT): $(OBJ)
 
-diagnostics.o indicator_core.o indicator.o options.o: override CFLAGS += $(STRICT_CFLAGS)
+cli.o diagnostics.o indicator_core.o indicator.o options.o: override CFLAGS += $(STRICT_CFLAGS)
 
 check-indicator-deps:
 	@$(PKG_CONFIG) --exists $(INDICATOR_PKGS) || { \
@@ -64,9 +64,9 @@ check-indicator-deps:
 		exit 1; \
 	}
 
-ANALYZE_SRC = src/diagnostics.c src/indicator_core.c src/indicator.c src/options.c
+ANALYZE_SRC = src/cli.c src/diagnostics.c src/indicator_core.c src/indicator.c src/options.c
 
-analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator and option sources
+analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator, cli and option sources
 	for source in $(ANALYZE_SRC); do \
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(STRICT_CFLAGS) -Werror -fanalyzer -c -o /dev/null $$source || exit 1; \
 	done
@@ -77,19 +77,23 @@ analyze: ## Run gcc -fanalyzer, cppcheck and clang-tidy on the indicator and opt
 		clang-tidy $(ANALYZE_SRC) -- $(CPPFLAGS) -std=c99 -Isrc; \
 	else echo "clang-tidy not installed, skipped"; fi
 
-TEST_BINS = test/indicator_core_test test/options_test
+TEST_BINS = test/indicator_core_test test/cli_test test/options_test
 
 $(TEST_BINS): Makefile
 
 check: $(TEST_BINS) ## Build and run the unit tests (TEST_CFLAGS, WERROR=-Werror)
 	./test/indicator_core_test
+	./test/cli_test
 	./test/options_test
 
 test/indicator_core_test: test/indicator_core_test.c src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h
 	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/indicator_core_test.c src/indicator_core.c
 
-test/options_test: test/options_test.c src/options.c src/options.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h src/helpers.h
-	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/indicator_core.c
+test/cli_test: test/cli_test.c src/cli.c src/cli.h src/chain_phase.h
+	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/cli_test.c src/cli.c
+
+test/options_test: test/options_test.c src/options.c src/options.h src/cli.c src/cli.h src/indicator_core.c src/indicator_core.h src/chain_phase.h src/diagnostics.h src/helpers.h
+	$(CC) -std=c99 -pedantic -Wall -Wextra $(STRICT_CFLAGS) $(WERROR) $(TEST_CFLAGS) -Isrc -o $@ test/options_test.c src/options.c src/cli.c src/indicator_core.c
 
 install: ## Install the program, man page and examples under PREFIX
 	mkdir -p "$(DESTDIR)$(BINPREFIX)"
